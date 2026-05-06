@@ -981,6 +981,39 @@ textarea {
   overflow-x: auto;
 }
 
+.codeGroups {
+  display: grid;
+  gap: 14px;
+}
+
+.codeGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.codeGroupHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.codeGroupHeader strong {
+  font-size: 15px;
+}
+
+.codeGroupHeader span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.codeText {
+  color: var(--primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
 table {
   border-collapse: collapse;
   min-width: 760px;

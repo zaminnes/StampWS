@@ -22,6 +22,8 @@ type Stamp = {
 
 type CodeRow = {
   codeLabel: string;
+  fullCode?: string;
+  groupName: string;
   role: string;
   targetName: string;
   used: boolean;
@@ -370,6 +372,9 @@ async function writePrinter(characteristic: BluetoothWriteCharacteristic, data: 
 
 async function connectNemonicPrinter() {
   const bluetooth = (navigator as BluetoothNavigator).bluetooth;
+  if (!window.isSecureContext) {
+    throw new Error("네모닉 인쇄는 HTTPS 또는 localhost에서만 가능합니다.");
+  }
   if (!bluetooth) {
     throw new Error("Chrome 또는 Edge에서 블루투스를 켜주세요.");
   }
@@ -413,114 +418,6 @@ async function printTempPasses(passes: TempPassView[], printerType: PrinterType,
     await delay(350);
     onProgress(12 + Math.round(((index + 1) / printable.length) * 88));
   }
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function browserPrintTempPasses(passes: TempPassView[], printerType: PrinterType) {
-  const printable = passes.filter((pass) => pass.status === "active" && pass.qrToken);
-  if (printable.length === 0) throw new Error("선택된 임시 QR이 없습니다.");
-
-  const pageWidth = printerType === "mini" ? "58mm" : "80mm";
-  const qrSize = printerType === "mini" ? "38mm" : "48mm";
-  const printWindow = window.open("", "_blank", "width=420,height=720");
-  if (!printWindow) throw new Error("팝업 차단을 해제한 뒤 다시 인쇄하세요.");
-
-  const pages = printable
-    .map((pass) => {
-      const qrSrc = `${window.location.origin}/api/qr?value=${encodeURIComponent(publicQrValue(pass.qrToken || ""))}`;
-      return `
-        <section class="ticket">
-          <div class="box">
-            <p class="eyebrow">WSHS SCIENCE</p>
-            <h1>${escapeHtml(fitText(pass.displayName || pass.label, 14))}</h1>
-            <img src="${qrSrc}" alt="${escapeHtml(pass.label)} QR" />
-            <strong>${escapeHtml(pass.label)}</strong>
-            <span>7개 완료 후 보상 부스 스캔</span>
-            <small>현장 임시권 · 랭킹 제외</small>
-          </div>
-        </section>
-      `;
-    })
-    .join("");
-
-  printWindow.document.open();
-  printWindow.document.write(`<!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>임시 QR 인쇄</title>
-        <style>
-          @page { size: ${pageWidth} auto; margin: 3mm; }
-          * { box-sizing: border-box; }
-          body {
-            margin: 0;
-            background: #fff;
-            color: #111827;
-            font-family: Inter, Arial, Apple SD Gothic Neo, sans-serif;
-          }
-          .ticket {
-            page-break-after: always;
-            width: ${pageWidth};
-            padding: 2mm;
-          }
-          .ticket:last-child { page-break-after: auto; }
-          .box {
-            border: 1.5px solid #111827;
-            border-radius: 4mm;
-            display: grid;
-            gap: 2mm;
-            justify-items: center;
-            min-height: ${printerType === "mini" ? "78mm" : "96mm"};
-            padding: 5mm 3mm;
-            text-align: center;
-          }
-          .eyebrow {
-            font-size: ${printerType === "mini" ? "10pt" : "11pt"};
-            font-weight: 900;
-            letter-spacing: 0.04em;
-            margin: 0;
-          }
-          h1 {
-            font-size: ${printerType === "mini" ? "18pt" : "22pt"};
-            line-height: 1.08;
-            margin: 0;
-          }
-          img {
-            height: ${qrSize};
-            image-rendering: pixelated;
-            width: ${qrSize};
-          }
-          strong {
-            border: 1px solid #111827;
-            border-radius: 999px;
-            font-size: ${printerType === "mini" ? "10pt" : "11pt"};
-            padding: 1mm 3mm;
-          }
-          span {
-            font-size: ${printerType === "mini" ? "9pt" : "10pt"};
-            font-weight: 800;
-          }
-          small {
-            color: #4b5563;
-            font-size: ${printerType === "mini" ? "8pt" : "9pt"};
-            font-weight: 800;
-          }
-        </style>
-      </head>
-      <body>${pages}</body>
-    </html>`);
-  printWindow.document.close();
-  printWindow.focus();
-  window.setTimeout(() => {
-    printWindow.print();
-  }, 450);
 }
 
 function QrImage({ token, label }: { token: string; label: string }) {
@@ -1227,40 +1124,68 @@ function CodesPanel() {
       .catch((err) => setError(err instanceof Error ? err.message : "코드 로드 실패"));
   }, []);
 
+  const showFullCode = codes.some((code) => code.fullCode);
+  const groupedCodes = useMemo(() => {
+    const order = ["화학", "생명", "퀘이사", "알파고", "총괄"];
+    const groups = new Map<string, CodeRow[]>();
+    for (const code of codes) {
+      const group = code.groupName || "기타";
+      groups.set(group, [...(groups.get(group) || []), code]);
+    }
+    return [...groups.entries()].sort((a, b) => {
+      const ai = order.includes(a[0]) ? order.indexOf(a[0]) : 99;
+      const bi = order.includes(b[0]) ? order.indexOf(b[0]) : 99;
+      if (ai !== bi) return ai - bi;
+      return a[0].localeCompare(b[0]);
+    });
+  }, [codes]);
+
   return (
     <section className="panel">
       <div className="sectionHeader">
         <div>
           <h2>코드</h2>
-          <p>원문은 숨김.</p>
+          <p>{showFullCode ? "총괄은 원문 표시." : "원문은 숨김."}</p>
         </div>
       </div>
       {error && <p className="errorText">{error}</p>}
-      <div className="tableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th>코드번호</th>
-              <th>역할</th>
-              <th>담당</th>
-              <th>상태</th>
-              <th>사용 시간</th>
-              <th>사용자</th>
-            </tr>
-          </thead>
-          <tbody>
-            {codes.map((code) => (
-              <tr key={code.codeLabel}>
-                <td>{code.codeLabel}</td>
-                <td>{code.role}</td>
-                <td>{code.targetName}</td>
-                <td><span className={`pill ${code.used ? "done" : "ok"}`}>{code.revoked ? "비활성" : code.used ? "사용됨" : "미사용"}</span></td>
-                <td>{formatTime(code.usedAt)}</td>
-                <td>{code.usedByDisplayName || "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="codeGroups">
+        {groupedCodes.map(([groupName, rows]) => (
+          <section className="codeGroup" key={groupName}>
+            <div className="codeGroupHeader">
+              <strong>{groupName}</strong>
+              <span>{rows.length}개</span>
+            </div>
+            <div className="tableWrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>번호</th>
+                    {showFullCode && <th>풀 코드</th>}
+                    <th>역할</th>
+                    <th>담당</th>
+                    <th>상태</th>
+                    <th>사용 시간</th>
+                    <th>사용자</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((code) => (
+                    <tr key={code.codeLabel}>
+                      <td>{code.codeLabel}</td>
+                      {showFullCode && <td className="codeText">{code.fullCode || "seed 없음"}</td>}
+                      <td>{code.role}</td>
+                      <td>{code.targetName}</td>
+                      <td><span className={`pill ${code.used ? "done" : "ok"}`}>{code.revoked ? "비활성" : code.used ? "사용됨" : "미사용"}</span></td>
+                      <td>{formatTime(code.usedAt)}</td>
+                      <td>{code.usedByDisplayName || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ))}
       </div>
     </section>
   );
@@ -1331,11 +1256,10 @@ function TempPassPanel() {
     setProgress(0);
     setMessage("");
     try {
-      browserPrintTempPasses(printTargets, printerType);
-      setProgress(100);
-      setMessage(`${printTargets.length}개 인쇄 열림`);
+      await printTempPasses(printTargets, printerType, setProgress);
+      setMessage(`${printTargets.length}개 네모닉 인쇄 완료`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "인쇄 실패");
+      setMessage(err instanceof Error ? err.message : "네모닉 인쇄 실패");
     } finally {
       setPrinting(false);
     }
@@ -1382,7 +1306,7 @@ function TempPassPanel() {
           <textarea value={displayNames} onChange={(event) => setDisplayNames(event.target.value)} placeholder="선택 입력" rows={3} />
         </label>
         <label>
-          프린터
+          네모닉
           <select value={printerType} onChange={(event) => setPrinterType(event.target.value as PrinterType)}>
             <option value="normal">일반</option>
             <option value="mini">미니</option>
@@ -1402,7 +1326,7 @@ function TempPassPanel() {
       <div className="summaryRows tempSummary">
         <div><span>선택</span><strong>{printTargets.length}개</strong></div>
         <div><span>사용 가능</span><strong>{passes.filter((pass) => pass.status === "active").length}개</strong></div>
-        <div><span>랭킹</span><strong>제외</strong></div>
+        <div><span>인쇄</span><strong>네모닉</strong></div>
       </div>
 
       {message && <p className={message.includes("완료") || message.includes("생성") ? "statusText" : "errorText"}>{message}</p>}
