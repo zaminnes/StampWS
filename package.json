@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
     "secrets:generate": "node scripts/generate_secrets.mjs",
+    "secrets:write": "node scripts/generate_secrets.mjs --write",
     "codes:print": "node scripts/print_admin_codes.mjs",
     "typecheck": "tsc --noEmit"
   },

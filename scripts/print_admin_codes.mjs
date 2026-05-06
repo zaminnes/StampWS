@@ -1,6 +1,9 @@
 import crypto from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 
-const seed = process.env.ADMIN_CODE_SEED;
+const seedFile = path.join(process.cwd(), ".data", "firebase-secrets", "ADMIN_CODE_SEED");
+const seed = process.env.ADMIN_CODE_SEED || (existsSync(seedFile) ? readFileSync(seedFile, "utf8").trim() : "");
 
 if (!seed || seed.length < 16) {
   console.error("Set ADMIN_CODE_SEED first.");
