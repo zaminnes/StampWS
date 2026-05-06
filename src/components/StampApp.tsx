@@ -297,11 +297,6 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
         </button>
       </section>
       <section className="quickPanel">
-        <div className="metricGrid compactMetrics">
-          <div><strong>7</strong><span>쿠폰</span></div>
-          <div><strong>1</strong><span>보상</span></div>
-          <div><strong>50</strong><span>코드</span></div>
-        </div>
         <section className="panel">
           <h2>보상</h2>
           <div className="rewardStrip">
