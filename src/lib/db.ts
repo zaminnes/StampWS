@@ -76,7 +76,11 @@ let writeQueue: Promise<unknown> = Promise.resolve();
 let tokenCache: { accessToken: string; expiresAt: number } | null = null;
 
 function useFirestoreBackend() {
-  return process.env.STAMP_DB_BACKEND === "firestore";
+  if (process.env.STAMP_DB_BACKEND === "firestore") return true;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Production server must use Firestore. Set STAMP_DB_BACKEND=firestore.");
+  }
+  return false;
 }
 
 function getProjectId() {

@@ -15,14 +15,14 @@ Open:
 http://127.0.0.1:3000
 ```
 
-The first server-side auth request creates a local development database in `.data/`.
-Initial super admin credentials and the 50 one-time admin invite codes are written to:
+Local development only: the first server-side auth request creates a dev database in `.data/`.
+Initial super admin credentials and the admin invite codes are written to:
 
 ```txt
 .data/bootstrap-secrets.txt
 ```
 
-Keep that file server-side only. It is ignored by git.
+Keep that file server-side only. It is ignored by git. Production never uses `.data/`.
 
 ## Roles
 
@@ -64,6 +64,8 @@ The production database backend is enabled by:
 STAMP_DB_BACKEND=firestore
 FIREBASE_PROJECT_ID=stampwooshin
 ```
+
+Production is server-backed only. If `STAMP_DB_BACKEND=firestore` or `APP_SECRET` is missing while `NODE_ENV=production`, the server fails instead of falling back to `.data/`.
 
 Production secrets are not stored in git. Generate values:
 

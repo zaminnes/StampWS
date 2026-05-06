@@ -12,7 +12,7 @@ export async function getAppSecret() {
     return process.env.APP_SECRET;
   }
 
-  if (process.env.STAMP_DB_BACKEND === "firestore") {
+  if (process.env.STAMP_DB_BACKEND === "firestore" || process.env.NODE_ENV === "production") {
     throw new Error("Firebase App Hosting에서는 APP_SECRET secret을 설정해야 합니다.");
   }
 
