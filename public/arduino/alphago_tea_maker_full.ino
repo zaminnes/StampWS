@@ -1,0 +1,293 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Servo.h>
+
+#define SS_PIN 10
+#define RST_PIN A1
+
+const int stepPin = 9;
+const int dirPin = 6;
+const int enablePin = 5;
+const int waterPump = 4;
+const int icedTeaPump = 8;
+const int servoPin = 2;
+const int lightSensor = A0;
+const int buttonPin = 3;
+
+const int defaultWaterSeconds = 15;
+const int defaultTeaSeconds = 20;
+const int defaultLowerSteps = 2000;
+const int defaultLiftSteps = 2500;
+int cupThreshold = 500;
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+MFRC522 rfid(SS_PIN, RST_PIN);
+Servo mixerServo;
+
+volatile bool isEmergency = false;
+bool lastCupState = false;
+bool isBrewing = false;
+unsigned long lastSensorLogAt = 0;
+
+void reportStatus(const char* status) {
+  Serial.print("STATUS:");
+  Serial.println(status);
+}
+
+void lcdPrint(String line1, String line2) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(line1.substring(0, 16));
+  lcd.setCursor(0, 1);
+  lcd.print(line2.substring(0, 16));
+}
+
+void emergencyStop() {
+  isEmergency = true;
+}
+
+bool cupPresent() {
+  return analogRead(lightSensor) >= cupThreshold;
+}
+
+bool checkEmergency() {
+  if (!isEmergency) return false;
+  digitalWrite(waterPump, LOW);
+  digitalWrite(icedTeaPump, LOW);
+  digitalWrite(enablePin, HIGH);
+  mixerServo.write(90);
+  isBrewing = false;
+  lcdPrint("EMERGENCY STOP", "Resetting");
+  reportStatus("EMERGENCY");
+  delay(1500);
+  isEmergency = false;
+  reportStatus("SYSTEM_READY");
+  return true;
+}
+
+bool safeDelay(int ms) {
+  int chunks = max(1, ms / 50);
+  for (int i = 0; i < chunks; i++) {
+    if (checkEmergency()) return true;
+    delay(50);
+  }
+  return false;
+}
+
+void moveStepper(bool down, int steps) {
+  digitalWrite(enablePin, LOW);
+  digitalWrite(dirPin, down ? LOW : HIGH);
+  for (int i = 0; i < steps; i++) {
+    if (checkEmergency()) break;
+    digitalWrite(stepPin, HIGH);
+    delayMicroseconds(800);
+    digitalWrite(stepPin, LOW);
+    delayMicroseconds(800);
+  }
+  digitalWrite(enablePin, HIGH);
+}
+
+void mixDrink() {
+  reportStatus("MIXER_LOWERING");
+  moveStepper(true, defaultLowerSteps);
+  if (checkEmergency()) return;
+
+  reportStatus("MIXING");
+  for (int pos = 90; pos <= 180; pos++) {
+    if (checkEmergency()) return;
+    mixerServo.write(pos);
+    delay(30);
+  }
+
+  for (int mix = 0; mix < 7; mix++) {
+    for (int pos = 180; pos >= 130; pos -= 2) {
+      if (checkEmergency()) return;
+      mixerServo.write(pos);
+      delay(12);
+    }
+    for (int pos = 130; pos <= 180; pos += 2) {
+      if (checkEmergency()) return;
+      mixerServo.write(pos);
+      delay(12);
+    }
+  }
+
+  if (safeDelay(2000)) return;
+
+  for (int pos = 180; pos >= 90; pos--) {
+    if (checkEmergency()) return;
+    mixerServo.write(pos);
+    delay(20);
+  }
+
+  reportStatus("LIFTING");
+  moveStepper(false, defaultLiftSteps);
+}
+
+void makeIcedTea(int waterSeconds, int teaSeconds, bool force) {
+  if (isBrewing) {
+    reportStatus("ERROR:BUSY");
+    return;
+  }
+  if (!force && !cupPresent()) {
+    reportStatus("ERROR:NO_CUP");
+    lcdPrint("Place Cup", "Try Again");
+    return;
+  }
+
+  isBrewing = true;
+  lcdPrint("Iced Tea", "Brewing");
+  reportStatus("DISPENSING");
+
+  int waterMs = constrain(waterSeconds, 1, 90) * 1000;
+  int teaMs = constrain(teaSeconds, 1, 90) * 1000;
+  int bothMs = min(waterMs, teaMs);
+  int waterExtra = waterMs - bothMs;
+  int teaExtra = teaMs - bothMs;
+
+  digitalWrite(waterPump, HIGH);
+  digitalWrite(icedTeaPump, HIGH);
+  if (safeDelay(bothMs)) return;
+  digitalWrite(waterPump, LOW);
+  digitalWrite(icedTeaPump, LOW);
+
+  if (waterExtra > 0) {
+    digitalWrite(waterPump, HIGH);
+    if (safeDelay(waterExtra)) return;
+    digitalWrite(waterPump, LOW);
+  }
+  if (teaExtra > 0) {
+    digitalWrite(icedTeaPump, HIGH);
+    if (safeDelay(teaExtra)) return;
+    digitalWrite(icedTeaPump, LOW);
+  }
+
+  if (!checkEmergency()) mixDrink();
+  digitalWrite(waterPump, LOW);
+  digitalWrite(icedTeaPump, LOW);
+  digitalWrite(enablePin, HIGH);
+  mixerServo.write(90);
+
+  if (!isEmergency) {
+    lcdPrint("Done", "Enjoy :)");
+    reportStatus("COMPLETE");
+    safeDelay(2500);
+    lcdPrint("Tea Maker Ready", "Place Cup");
+    reportStatus("SYSTEM_READY");
+  }
+  isBrewing = false;
+}
+
+int commandPart(String command, int index, int fallback) {
+  int start = 0;
+  for (int i = 0; i < index; i++) {
+    start = command.indexOf(',', start);
+    if (start < 0) return fallback;
+    start += 1;
+  }
+  int end = command.indexOf(',', start);
+  String value = end < 0 ? command.substring(start) : command.substring(start, end);
+  value.trim();
+  return value.length() ? value.toInt() : fallback;
+}
+
+void handleCommand(String command) {
+  command.trim();
+  command.toUpperCase();
+  if (!command.length()) return;
+
+  Serial.print("CMD:");
+  Serial.println(command);
+
+  if (command == "PING" || command == "STATUS") {
+    reportStatus(cupPresent() ? "CUP_DETECTED" : "SYSTEM_READY");
+    return;
+  }
+  if (command == "STOP") {
+    isEmergency = true;
+    checkEmergency();
+    return;
+  }
+  if (command.startsWith("CUP,")) {
+    cupThreshold = constrain(commandPart(command, 1, cupThreshold), 0, 1023);
+    reportStatus("CONFIG_UPDATED");
+    return;
+  }
+  if (command.startsWith("T,") || command.startsWith("FORCE,")) {
+    bool force = command.startsWith("FORCE,");
+    int waterSeconds = commandPart(command, 1, defaultWaterSeconds);
+    int teaSeconds = commandPart(command, 2, defaultTeaSeconds);
+    makeIcedTea(waterSeconds, teaSeconds, force);
+    return;
+  }
+
+  reportStatus("ERROR:UNKNOWN_COMMAND");
+}
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(stepPin, OUTPUT);
+  pinMode(dirPin, OUTPUT);
+  pinMode(enablePin, OUTPUT);
+  pinMode(waterPump, OUTPUT);
+  pinMode(icedTeaPump, OUTPUT);
+  pinMode(buttonPin, INPUT_PULLUP);
+
+  digitalWrite(enablePin, HIGH);
+  digitalWrite(waterPump, LOW);
+  digitalWrite(icedTeaPump, LOW);
+
+  mixerServo.attach(servoPin);
+  mixerServo.write(90);
+
+  SPI.begin();
+  rfid.PCD_Init();
+  lcd.init();
+  lcd.backlight();
+  attachInterrupt(digitalPinToInterrupt(buttonPin), emergencyStop, FALLING);
+
+  lcdPrint("Tea Maker Ready", "Place Cup");
+  reportStatus("SYSTEM_READY");
+}
+
+void loop() {
+  if (checkEmergency()) return;
+
+  if (Serial.available()) {
+    handleCommand(Serial.readStringUntil('\n'));
+    return;
+  }
+
+  bool currentCupState = cupPresent();
+  if (millis() - lastSensorLogAt > 1500) {
+    Serial.print("Light Sensor Value: ");
+    Serial.println(analogRead(lightSensor));
+    lastSensorLogAt = millis();
+  }
+
+  if (currentCupState != lastCupState) {
+    lastCupState = currentCupState;
+    if (currentCupState) {
+      lcdPrint("Cup Detected", "Web or RFID");
+      reportStatus("CUP_DETECTED");
+    } else {
+      lcdPrint("Tea Maker Ready", "Place Cup");
+      reportStatus("SYSTEM_READY");
+    }
+  }
+
+  if (!currentCupState || isBrewing) {
+    delay(80);
+    return;
+  }
+
+  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    reportStatus("RFID_DETECTED");
+    makeIcedTea(defaultWaterSeconds, defaultTeaSeconds, false);
+    rfid.PICC_HaltA();
+  }
+
+  delay(50);
+}

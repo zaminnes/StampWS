@@ -14,6 +14,7 @@ import type {
   Session,
   Stamp,
   StampDb,
+  TeaReservation,
   TempPass,
   UserStats
 } from "./types";
@@ -36,6 +37,7 @@ const COLLECTIONS = {
   stamps: "stampAppStamps",
   coupons: "stampAppCoupons",
   tempPasses: "stampAppTempPasses",
+  teaReservations: "stampAppTeaReservations",
   profiles: "stampAppProfiles",
   userStats: "stampAppUserStats",
   nameChangeLogs: "stampAppNameChangeLogs",
@@ -216,6 +218,7 @@ async function buildInitialDb() {
     stamps: [],
     coupons: [],
     tempPasses: [],
+    teaReservations: [],
     profiles: [],
     userStats: [],
     nameChangeLogs: [],
@@ -376,6 +379,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
   const stamps = await listCollection<Stamp>("stamps");
   const coupons = await listCollection<Coupon>("coupons");
   const tempPasses = await listCollection<TempPass>("tempPasses");
+  const teaReservations = await listCollection<TeaReservation>("teaReservations");
   const profiles = await listCollection<Profile>("profiles");
   const userStats = await listCollection<UserStats>("userStats");
   const nameChangeLogs = await listCollection<NameChangeLog>("nameChangeLogs");
@@ -392,6 +396,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       stamps: stamps.items,
       coupons: coupons.items,
       tempPasses: tempPasses.items,
+      teaReservations: teaReservations.items,
       profiles: profiles.items,
       userStats: userStats.items,
       nameChangeLogs: nameChangeLogs.items,
@@ -407,6 +412,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       stamps: stamps.payloads,
       coupons: coupons.payloads,
       tempPasses: tempPasses.payloads,
+      teaReservations: teaReservations.payloads,
       profiles: profiles.payloads,
       userStats: userStats.payloads,
       nameChangeLogs: nameChangeLogs.payloads,
@@ -421,6 +427,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       stamps: stamps.names,
       coupons: coupons.names,
       tempPasses: tempPasses.names,
+      teaReservations: teaReservations.names,
       profiles: profiles.names,
       userStats: userStats.names,
       nameChangeLogs: nameChangeLogs.names,
@@ -439,6 +446,7 @@ function emptyPayloadMaps(): Record<CollectionKey, Map<string, string>> {
     stamps: new Map(),
     coupons: new Map(),
     tempPasses: new Map(),
+    teaReservations: new Map(),
     profiles: new Map(),
     userStats: new Map(),
     nameChangeLogs: new Map(),
@@ -456,6 +464,7 @@ function emptyNameSets(): Record<CollectionKey, Set<string>> {
     stamps: new Set(),
     coupons: new Set(),
     tempPasses: new Set(),
+    teaReservations: new Set(),
     profiles: new Set(),
     userStats: new Set(),
     nameChangeLogs: new Set(),
@@ -518,6 +527,7 @@ async function commitFirestoreDb(db: StampDb, snapshot: FirestoreSnapshot) {
   addCollectionWrites(writes, "stamps", db.stamps, snapshot.payloads.stamps, snapshot.names.stamps);
   addCollectionWrites(writes, "coupons", db.coupons, snapshot.payloads.coupons, snapshot.names.coupons);
   addCollectionWrites(writes, "tempPasses", db.tempPasses, snapshot.payloads.tempPasses, snapshot.names.tempPasses);
+  addCollectionWrites(writes, "teaReservations", db.teaReservations, snapshot.payloads.teaReservations, snapshot.names.teaReservations);
   addCollectionWrites(writes, "profiles", db.profiles, snapshot.payloads.profiles, snapshot.names.profiles);
   addCollectionWrites(writes, "userStats", db.userStats, snapshot.payloads.userStats, snapshot.names.userStats);
   addCollectionWrites(writes, "nameChangeLogs", db.nameChangeLogs, snapshot.payloads.nameChangeLogs, snapshot.names.nameChangeLogs);
@@ -541,6 +551,7 @@ async function readFirestoreDb() {
 
 function normalizeDb(db: StampDb) {
   db.tempPasses ||= [];
+  db.teaReservations ||= [];
   db.rewards = REWARDS.map((reward) => ({
     ...reward,
     active: db.rewards.find((item) => item.id === reward.id)?.active ?? reward.active
@@ -620,6 +631,7 @@ export async function resetDbToClubSetup(actorAccountId: string, ipHash: string,
     db.stamps = [];
     db.coupons = [];
     db.tempPasses = [];
+    db.teaReservations = [];
     db.profiles = [];
     db.userStats = [];
     db.nameChangeLogs = [];

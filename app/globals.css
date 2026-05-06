@@ -898,6 +898,48 @@ textarea {
   font-weight: 800;
 }
 
+.teaReservePanel {
+  display: grid;
+  gap: 14px;
+}
+
+.teaReserveLayout,
+.teaDeviceHero {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 72px 1fr;
+  padding: 12px;
+}
+
+.teaReserveLayout img,
+.teaDeviceHero img {
+  aspect-ratio: 1;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  object-fit: contain;
+  padding: 6px;
+  width: 72px;
+}
+
+.teaReserveLayout strong,
+.teaDeviceHero strong {
+  display: block;
+  font-size: 17px;
+  margin-bottom: 4px;
+}
+
+.teaReserveLayout span,
+.teaDeviceHero span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .stampTile {
   background: var(--surface-soft);
   border: 1px solid var(--line);
@@ -1170,6 +1212,91 @@ th {
 
 .dangerZone {
   border-color: #fecaca;
+}
+
+.teaMakerGrid {
+  align-items: start;
+}
+
+.teaDevicePanel,
+.teaQueuePanel {
+  display: grid;
+  gap: 14px;
+}
+
+.secondaryLink {
+  align-items: center;
+  background: #f3f4f6;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: #374151;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 14px;
+  text-decoration: none;
+}
+
+.serialLogBox {
+  background: #0f172a;
+  border-radius: 12px;
+  color: #e5e7eb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  max-height: 260px;
+  min-height: 180px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.teaQueueList {
+  display: grid;
+  gap: 10px;
+}
+
+.teaQueueRow {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr auto;
+  padding: 12px;
+}
+
+.teaQueueRow.brewing {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.teaQueueRow.ready {
+  background: var(--success-bg);
+  border-color: #bbf7d0;
+}
+
+.teaQueueRow strong {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 3px;
+}
+
+.teaQueueRow span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.teaQueueActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .metricGrid strong,
@@ -1461,8 +1588,13 @@ th {
   }
 
   .accountTools,
-  .boothNameRow {
+  .boothNameRow,
+  .teaQueueRow {
     grid-template-columns: 1fr;
+  }
+
+  .teaQueueActions {
+    justify-content: flex-start;
   }
 
   .tempNameInput {

@@ -110,6 +110,27 @@ export type TempPass = {
   redeemedRewardId?: RewardId;
 };
 
+export type TeaReservation = {
+  id: string;
+  orderNumber: number;
+  participantAccountId?: string;
+  displayName: string;
+  studentCode?: string;
+  source: "online" | "manual" | "reward";
+  status: "reserved" | "brewing" | "ready" | "served" | "cancelled";
+  quantity: number;
+  note?: string;
+  serialCommand?: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  readyAt?: string;
+  servedAt?: string;
+  cancelledAt?: string;
+  handledByAccountId?: string;
+  cancelledByAccountId?: string;
+};
+
 export type Profile = {
   accountId: string;
   nickname: string;
@@ -169,6 +190,7 @@ export type StampDb = {
   stamps: Stamp[];
   coupons: Coupon[];
   tempPasses: TempPass[];
+  teaReservations: TeaReservation[];
   profiles: Profile[];
   userStats: UserStats[];
   nameChangeLogs: NameChangeLog[];

@@ -70,6 +70,24 @@ type TempPassView = {
   qrToken?: string | null;
 };
 
+type TeaReservationView = {
+  id: string;
+  orderNumber: number;
+  displayName: string;
+  studentCode?: string;
+  source: "online" | "manual" | "reward";
+  status: "reserved" | "brewing" | "ready" | "served" | "cancelled";
+  quantity: number;
+  note?: string;
+  serialCommand?: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  readyAt?: string;
+  servedAt?: string;
+  cancelledAt?: string;
+};
+
 type AdminAccountRow = {
   id: string;
   loginId: string;
@@ -102,6 +120,13 @@ type BluetoothDevice = {
   };
 };
 
+type SerialPort = {
+  open: (options: { baudRate: number }) => Promise<void>;
+  close: () => Promise<void>;
+  readable?: ReadableStream<Uint8Array>;
+  writable?: WritableStream<Uint8Array>;
+};
+
 declare global {
   interface Navigator {
   bluetooth?: {
@@ -109,6 +134,10 @@ declare global {
       filters: Array<{ namePrefix: string }>;
       optionalServices: string[];
     }) => Promise<BluetoothDevice>;
+  };
+  serial?: {
+    requestPort: () => Promise<SerialPort>;
+    addEventListener: (type: "disconnect", listener: () => void) => void;
   };
   }
 }
@@ -176,7 +205,7 @@ type MePayload = {
 };
 
 type AuthMode = "participant" | "adminLogin" | "adminJoin";
-type AppTab = "home" | "profile" | "leaderboard" | "boothScan" | "stampStudio" | "rewardScan" | "codes" | "admin" | "tempPasses";
+type AppTab = "home" | "profile" | "leaderboard" | "boothScan" | "stampStudio" | "rewardScan" | "teaMaker" | "codes" | "admin" | "tempPasses";
 
 type StampEffectState = {
   id: number;
@@ -260,6 +289,35 @@ function rewardDetail(rewardId?: Reward["id"]) {
   return REWARD_KO[rewardId]?.detail || "";
 }
 
+function canUseTeaMaker(account?: MePayload["account"]) {
+  return account?.role === "superAdmin" || account?.rewardId === "alphago";
+}
+
+function teaReservationStatus(status?: TeaReservationView["status"]) {
+  if (status === "brewing") return "제조중";
+  if (status === "ready") return "픽업";
+  if (status === "served") return "완료";
+  if (status === "cancelled") return "취소";
+  return "예약중";
+}
+
+function serialStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    offline: "미연결",
+    idle: "대기",
+    cup: "컵 감지",
+    ready: "준비",
+    dispensing: "추출",
+    lowering: "하강",
+    mixing: "믹싱",
+    lifting: "상승",
+    complete: "완료",
+    emergency: "비상",
+    error: "점검"
+  };
+  return labels[status] || status;
+}
+
 function roleLabel(role?: Role) {
   if (role === "participant") return "참가자";
   if (role === "boothAdmin") return "부스";
@@ -269,6 +327,7 @@ function roleLabel(role?: Role) {
 }
 
 const PRINTER_WIDTH = 576;
+const TEA_DEFAULT_COMMAND = "T,15,20";
 
 let printerConnected = false;
 const writeCharRef: { current: any } = { current: null };
@@ -948,6 +1007,8 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
         )}
       </section>
 
+      <TeaReservationCard />
+
       <section className="panel widePanel">
         <div className="sectionHeader compactHeader">
           <div>
@@ -971,6 +1032,69 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
         </div>
       </section>
     </div>
+  );
+}
+
+function TeaReservationCard() {
+  const [reservations, setReservations] = useState<TeaReservationView[]>([]);
+  const [note, setNote] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const data = await apiJson<{ reservations: TeaReservationView[] }>("/api/tea/reservations", { method: "GET" });
+    setReservations(data.reservations);
+  }, []);
+
+  useEffect(() => {
+    load().catch((err) => setMessage(err instanceof Error ? err.message : "예약 로드 실패"));
+  }, [load]);
+
+  const activeReservation = reservations.find((reservation) => ["reserved", "brewing", "ready"].includes(reservation.status));
+  const latestReservation = activeReservation || reservations[0];
+
+  async function createReservation() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const data = await apiJson<{ reservation: TeaReservationView }>("/api/tea/reservations", {
+        method: "POST",
+        body: JSON.stringify({ note })
+      });
+      setNote("");
+      await load();
+      setMessage(`#${data.reservation.orderNumber} 예약됨`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "예약 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel teaReservePanel widePanel">
+      <div className="sectionHeader">
+        <div>
+          <h2>티 예약</h2>
+          <p>알파고 아이스티.</p>
+        </div>
+        <span className="pill ok">아이스티</span>
+      </div>
+      <div className="teaReserveLayout">
+        <img src="/rewards/iced-tea.png" alt="알파고 아이스티" />
+        <div>
+          <strong>{latestReservation ? `#${latestReservation.orderNumber} ${teaReservationStatus(latestReservation.status)}` : "예약 없음"}</strong>
+          <span>{latestReservation ? formatTime(latestReservation.updatedAt) : "온라인 예약구매"}</span>
+        </div>
+      </div>
+      <div className="inlineForm">
+        <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={60} placeholder="요청 메모" />
+        <button disabled={busy || Boolean(activeReservation)} onClick={createReservation} type="button">
+          {busy ? "처리중" : activeReservation ? "진행중" : "예약구매"}
+        </button>
+      </div>
+      {message && <p className={message.includes("실패") || message.includes("진행") ? "errorText" : "statusText"}>{message}</p>}
+    </section>
   );
 }
 
@@ -1887,6 +2011,269 @@ function DatabaseResetPanel({ refresh }: { refresh: () => Promise<void> }) {
   );
 }
 
+function TeaMakerPanel() {
+  const portRef = useRef<SerialPort | null>(null);
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+  const writerRef = useRef<WritableStreamDefaultWriter<Uint8Array> | null>(null);
+  const readBufferRef = useRef("");
+  const activeReservationIdRef = useRef("");
+  const [reservations, setReservations] = useState<TeaReservationView[]>([]);
+  const [serialConnected, setSerialConnected] = useState(false);
+  const [machineStatus, setMachineStatus] = useState("offline");
+  const [serialCommand, setSerialCommand] = useState(TEA_DEFAULT_COMMAND);
+  const [manualName, setManualName] = useState("현장주문");
+  const [logs, setLogs] = useState<string[]>(["연결 대기"]);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const openReservations = reservations.filter((reservation) => ["reserved", "brewing", "ready"].includes(reservation.status));
+
+  const load = useCallback(async () => {
+    const data = await apiJson<{ reservations: TeaReservationView[] }>("/api/tea/reservations", { method: "GET" });
+    setReservations(data.reservations);
+  }, []);
+
+  useEffect(() => {
+    load().catch((err) => setMessage(err instanceof Error ? err.message : "예약 로드 실패"));
+    const timer = window.setInterval(() => {
+      load().catch(() => undefined);
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  function appendSerialLog(line: string, direction = "ARD") {
+    const stamp = new Intl.DateTimeFormat("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    }).format(new Date());
+    setLogs((current) => [...current.slice(-80), `[${stamp}] ${direction}> ${line}`]);
+  }
+
+  function applySerialStatus(rawLine: string) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("Light Sensor Value:")) return;
+    appendSerialLog(line);
+    const status = line.startsWith("STATUS:") ? line.slice("STATUS:".length).trim().toUpperCase() : line.toUpperCase();
+    if (status.includes("SYSTEM_READY") || status.includes("READY_FOR_COMMAND")) setMachineStatus("idle");
+    else if (status.includes("CUP_DETECTED")) setMachineStatus("cup");
+    else if (status.includes("RFID_DETECTED") || status.includes("CARD_VERIFIED")) setMachineStatus("ready");
+    else if (status.includes("DISPENSING")) setMachineStatus("dispensing");
+    else if (status.includes("MIXER_LOWERING")) setMachineStatus("lowering");
+    else if (status.includes("MIXING")) setMachineStatus("mixing");
+    else if (status.includes("LIFTING")) setMachineStatus("lifting");
+    else if (status.includes("COMPLETE")) {
+      setMachineStatus("complete");
+      const reservationId = activeReservationIdRef.current;
+      if (reservationId) {
+        patchReservation(reservationId, "ready").catch(() => undefined);
+        activeReservationIdRef.current = "";
+      }
+    } else if (status.includes("EMERGENCY")) setMachineStatus("emergency");
+    else if (status.includes("ERROR")) setMachineStatus("error");
+  }
+
+  async function readSerialLoop(port: SerialPort) {
+    const decoder = new TextDecoder();
+    while (portRef.current === port && port.readable) {
+      try {
+        const reader = port.readable.getReader();
+        readerRef.current = reader;
+        while (portRef.current === port) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          readBufferRef.current += decoder.decode(value, { stream: true });
+          const lines = readBufferRef.current.split(/\r?\n/);
+          readBufferRef.current = lines.pop() || "";
+          lines.map((line) => line.trim()).filter(Boolean).forEach(applySerialStatus);
+        }
+      } catch {
+        if (portRef.current === port) setMachineStatus("error");
+      } finally {
+        try { readerRef.current?.releaseLock(); } catch {}
+        readerRef.current = null;
+      }
+    }
+  }
+
+  async function connectDevice() {
+    setMessage("");
+    if (!navigator.serial) {
+      setMessage("Chrome/Edge HTTPS 필요");
+      return;
+    }
+    try {
+      const port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 9600 });
+      portRef.current = port;
+      if (port.writable) writerRef.current = port.writable.getWriter();
+      setSerialConnected(true);
+      setMachineStatus("idle");
+      appendSerialLog("USB connected", "WEB");
+      readSerialLoop(port).catch(() => setMachineStatus("error"));
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "USB 연결 실패");
+      setMachineStatus("error");
+    }
+  }
+
+  async function disconnectDevice() {
+    setMessage("");
+    const port = portRef.current;
+    portRef.current = null;
+    try { await readerRef.current?.cancel(); } catch {}
+    try { readerRef.current?.releaseLock(); } catch {}
+    try { writerRef.current?.releaseLock(); } catch {}
+    try { if (port) await port.close(); } catch {}
+    readerRef.current = null;
+    writerRef.current = null;
+    setSerialConnected(false);
+    setMachineStatus("offline");
+    appendSerialLog("USB disconnected", "WEB");
+  }
+
+  async function writeSerial(command: string) {
+    const writer = writerRef.current;
+    if (!writer) throw new Error("USB 연결 필요");
+    const clean = command.trim().toUpperCase();
+    await writer.write(new TextEncoder().encode(`${clean}\n`));
+    appendSerialLog(clean, "WEB");
+  }
+
+  async function patchReservation(reservationId: string, action: "start" | "ready" | "serve" | "cancel", command = serialCommand) {
+    const data = await apiJson<{ reservation: TeaReservationView }>("/api/tea/reservations", {
+      method: "PATCH",
+      body: JSON.stringify({ reservationId, action, serialCommand: command })
+    });
+    await load();
+    return data.reservation;
+  }
+
+  async function startReservation(reservation: TeaReservationView) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const command = reservation.serialCommand || serialCommand;
+      const updated = await patchReservation(reservation.id, "start", command);
+      activeReservationIdRef.current = updated.id;
+      await writeSerial(updated.serialCommand || command);
+      setMessage(`#${updated.orderNumber} 제조 시작`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "제조 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function manualBrew() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await writeSerial(serialCommand);
+      setMessage("즉시 제조");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "제조 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createManualReservation() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const data = await apiJson<{ reservation: TeaReservationView }>("/api/tea/reservations", {
+        method: "POST",
+        body: JSON.stringify({ displayName: manualName, serialCommand })
+      });
+      await load();
+      setMessage(`#${data.reservation.orderNumber} 현장 추가`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "추가 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function closeReservation(reservation: TeaReservationView, action: "serve" | "cancel") {
+    setMessage("");
+    try {
+      await patchReservation(reservation.id, action);
+      setMessage(action === "serve" ? "수령 완료" : "예약 취소");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "처리 실패");
+    }
+  }
+
+  return (
+    <div className="gridTwo teaMakerGrid">
+      <section className="panel teaDevicePanel">
+        <div className="sectionHeader">
+          <div>
+            <h2>티메이커</h2>
+            <p>알파고 운영.</p>
+          </div>
+          <span className={`pill ${serialConnected ? "ok" : "done"}`}>{serialStatusLabel(machineStatus)}</span>
+        </div>
+        <div className="teaDeviceHero">
+          <img src="/rewards/iced-tea.png" alt="아이스티" />
+          <div>
+            <strong>아이스티</strong>
+            <span>Automatic Ice-Tea Maker</span>
+          </div>
+        </div>
+        <div className="canvasTools">
+          <button className="primaryButton" onClick={serialConnected ? disconnectDevice : connectDevice} type="button">
+            {serialConnected ? "해제" : "USB 연결"}
+          </button>
+          <label>
+            명령
+            <input value={serialCommand} onChange={(event) => setSerialCommand(event.target.value.toUpperCase())} placeholder={TEA_DEFAULT_COMMAND} />
+          </label>
+          <button className="secondaryButton" disabled={busy || !serialConnected} onClick={manualBrew} type="button">즉시제조</button>
+        </div>
+        <div className="canvasTools">
+          <label>
+            현장명
+            <input value={manualName} onChange={(event) => setManualName(event.target.value)} maxLength={12} />
+          </label>
+          <button className="secondaryButton" disabled={busy} onClick={createManualReservation} type="button">현장추가</button>
+          <a className="secondaryLink" href="/arduino/alphago_tea_maker_full.ino" target="_blank" rel="noreferrer">펌웨어</a>
+        </div>
+        {message && <p className={message.includes("실패") || message.includes("필요") ? "errorText" : "statusText"}>{message}</p>}
+        <div className="serialLogBox">{logs.join("\n")}</div>
+      </section>
+
+      <section className="panel teaQueuePanel">
+        <div className="sectionHeader">
+          <div>
+            <h2>예약</h2>
+            <p>{openReservations.length}건 진행.</p>
+          </div>
+          <button className="secondaryButton" onClick={load} type="button">새로고침</button>
+        </div>
+        <div className="teaQueueList">
+          {reservations.map((reservation) => (
+            <div className={`teaQueueRow ${reservation.status}`} key={reservation.id}>
+              <div>
+                <strong>#{reservation.orderNumber} {reservation.displayName}</strong>
+                <span>{teaReservationStatus(reservation.status)} · {reservation.source === "online" ? "온라인" : "현장"} · {formatTime(reservation.createdAt)}</span>
+              </div>
+              <div className="teaQueueActions">
+                {reservation.status === "reserved" && <button className="primaryButton" disabled={busy || !serialConnected} onClick={() => startReservation(reservation)} type="button">제조</button>}
+                {reservation.status === "ready" && <button className="secondaryButton" onClick={() => closeReservation(reservation, "serve")} type="button">수령</button>}
+                {["reserved", "brewing", "ready"].includes(reservation.status) && <button className="dangerButton" onClick={() => closeReservation(reservation, "cancel")} type="button">취소</button>}
+              </div>
+            </div>
+          ))}
+          {reservations.length === 0 && <p className="emptyText">예약 없음</p>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
   return (
     <div className="gridTwo adminGrid">
@@ -2013,6 +2400,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
 
   const role = me.account?.role;
   const rewards = me.rewards || [];
+  const teaAccess = canUseTeaMaker(me.account);
 
   const nav = useMemo(() => {
     if (!role) return [];
@@ -2024,22 +2412,25 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
     if (role === "boothAdmin") return [
       ["boothScan", "지급"],
       ["rewardScan", "사용"],
+      ...(teaAccess ? [["teaMaker", "티메이커"] as [AppTab, string]] : []),
       ["stampStudio", "도장"],
       ["codes", "코드"],
       ["leaderboard", "랭킹"]
     ] as Array<[AppTab, string]>;
     if (role === "rewardAdmin") return [
       ["rewardScan", "사용"],
+      ...(teaAccess ? [["teaMaker", "티메이커"] as [AppTab, string]] : []),
       ["codes", "코드"],
       ["leaderboard", "랭킹"]
     ] as Array<[AppTab, string]>;
     return [
       ["admin", "총괄"],
+      ["teaMaker", "티메이커"],
       ["tempPasses", "임시"],
       ["codes", "코드"],
       ["leaderboard", "랭킹"]
     ] as Array<[AppTab, string]>;
-  }, [role]);
+  }, [role, teaAccess]);
 
   async function logout() {
     if (me.account?.role === "participant") {
@@ -2125,6 +2516,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       {!(role === "participant" && me.account.displayNameRequired) && tab === "stampStudio" && <StampStudio me={me} refresh={refresh} />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "boothScan" && <BoothScanPanel me={me} onScan={handleStampScan} />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "tempPasses" && role === "superAdmin" && <TempPassPanel />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "teaMaker" && teaAccess && <TeaMakerPanel />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "rewardScan" && (
         <div className="gridTwo">
           <section className="panel rewardAdminCard">
