@@ -9,20 +9,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "QR 값이 올바르지 않습니다." }, { status: 400 });
   }
 
-  const svg = await QRCode.toString(value, {
-    type: "svg",
+  const png = await QRCode.toBuffer(value, {
+    type: "png",
     errorCorrectionLevel: "M",
     margin: 1,
     width: 260,
     color: {
-      dark: "#111827",
+      dark: "#000000",
       light: "#ffffff"
     }
   });
 
-  return new NextResponse(svg, {
+  const body = png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer;
+
+  return new NextResponse(body, {
     headers: {
-      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Content-Type": "image/png",
       "Cache-Control": "no-store"
     }
   });
