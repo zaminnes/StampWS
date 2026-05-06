@@ -448,6 +448,66 @@ textarea {
   padding: 12px 14px;
 }
 
+.noticeAlert {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  position: sticky;
+  text-align: left;
+  top: 10px;
+  width: 100%;
+  z-index: 30;
+}
+
+.noticeAlert:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.noticeAlert > span {
+  align-items: center;
+  background: var(--info-bg);
+  border-radius: 999px;
+  color: var(--primary);
+  display: flex;
+  font-size: 12px;
+  font-weight: 900;
+  height: 32px;
+  justify-content: center;
+  width: 48px;
+}
+
+.noticeAlert strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 900;
+  margin-bottom: 3px;
+}
+
+.noticeAlert p {
+  color: #374151;
+  font-size: 14px;
+  font-weight: 750;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noticeAlert small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .stampEffect {
   align-items: center;
   background: rgba(255, 255, 255, 0.96);
@@ -815,6 +875,42 @@ textarea {
   aspect-ratio: 1;
   object-fit: contain;
   width: 100%;
+}
+
+.rewardVisual {
+  align-items: center;
+  aspect-ratio: 1;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  padding: 10px;
+  width: 116px;
+}
+
+.rewardVisual img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.rewardVisual.empty {
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.couponRewardInfo {
+  align-content: center;
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.couponRewardImage {
+  width: 148px;
 }
 
 .rewardChoice span {
@@ -1481,6 +1577,7 @@ th {
   border-radius: 12px;
   display: grid;
   gap: 5px;
+  justify-items: start;
   padding: 18px;
 }
 
@@ -2132,6 +2229,15 @@ th {
 
   .sectionHeader {
     display: grid;
+  }
+
+  .noticeAlert {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .noticeAlert small {
+    grid-column: 2;
   }
 
   .teaCustomerHero {

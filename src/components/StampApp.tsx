@@ -2,6 +2,10 @@
 
 import jsQR from "jsqr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import beanTeaImage from "../../public/rewards/bean-tea.png";
+import dalgonaImage from "../../public/rewards/dalgona.png";
+import icedTeaImage from "../../public/rewards/iced-tea.png";
+import popcornImage from "../../public/rewards/popcorn.png";
 
 type Role = "participant" | "boothAdmin" | "rewardAdmin" | "superAdmin";
 
@@ -290,6 +294,17 @@ const REWARD_KO: Record<Reward["id"], { clubName: string; name: string; detail?:
   alphago: { clubName: "알파고", name: "아이스티", detail: "made by Automatic Ice-Tea Maker Machine" }
 };
 
+const REWARD_IMAGE_SRC: Record<Reward["id"], string> = {
+  chemistry: dalgonaImage.src,
+  biology: beanTeaImage.src,
+  quasar: popcornImage.src,
+  alphago: icedTeaImage.src
+};
+
+function rewardImagePath(rewardId?: Reward["id"]) {
+  return rewardId ? REWARD_IMAGE_SRC[rewardId] : "";
+}
+
 async function apiJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
@@ -355,6 +370,15 @@ function rewardNameById(rewardId?: Reward["id"]) {
 function rewardDetail(rewardId?: Reward["id"]) {
   if (!rewardId) return "";
   return REWARD_KO[rewardId]?.detail || "";
+}
+
+function RewardImage({ reward, className = "" }: { reward?: Reward; className?: string }) {
+  if (!reward) return <div className={`rewardVisual empty ${className}`}>-</div>;
+  return (
+    <div className={`rewardVisual ${className}`}>
+      <img src={rewardImagePath(reward.id)} alt={rewardLabel(reward)} />
+    </div>
+  );
 }
 
 function canUseTeaMaker(account?: MePayload["account"]) {
@@ -945,19 +969,19 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
           </div>
           <div className="rewardRail">
             <div>
-              <img src="/rewards/dalgona.png" alt="화학 달고나" />
+              <img src={rewardImagePath("chemistry")} alt="화학 달고나" />
               <span>화학 달고나</span>
             </div>
             <div>
-              <img src="/rewards/bean-tea.png" alt="생명 콩가루차" />
+              <img src={rewardImagePath("biology")} alt="생명 콩가루차" />
               <span>생명 콩가루차</span>
             </div>
             <div>
-              <img src="/rewards/popcorn.png" alt="퀘이사 팝콘" />
+              <img src={rewardImagePath("quasar")} alt="퀘이사 팝콘" />
               <span>퀘이사 팝콘</span>
             </div>
             <div>
-              <img src="/rewards/iced-tea.png" alt="알파고 아이스티" />
+              <img src={rewardImagePath("alphago")} alt="알파고 아이스티" />
               <span>알파고 아이스티</span>
               <small>Automatic Ice-Tea Maker</small>
             </div>
@@ -1048,7 +1072,8 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
         </div>
         {me.coupon ? (
           <div className="couponLayout">
-            <div>
+            <div className="couponRewardInfo">
+              <RewardImage reward={couponReward} className="couponRewardImage" />
               <p className="couponTitle">{rewardLabel(couponReward)}</p>
               {rewardDetail(couponReward?.id) && <p className="rewardDetail">{rewardDetail(couponReward?.id)}</p>}
               <p className={`pill ${me.coupon.status === "unused" ? "ok" : "done"}`}>
@@ -1067,7 +1092,7 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
                   onClick={() => setSelectedReward(reward.id)}
                   type="button"
                 >
-                  <img src={reward.imagePath} alt={reward.name} />
+                  <img src={rewardImagePath(reward.id)} alt={reward.name} />
                   <span>{rewardLabel(reward)}</span>
                   {rewardDetail(reward.id) && <small>{rewardDetail(reward.id)}</small>}
                 </button>
@@ -1179,7 +1204,7 @@ function TeaReservationCard({ me }: { me: MePayload }) {
           </div>
         </div>
         <div className="teaProductStage" aria-hidden="true">
-          <img src="/rewards/iced-tea.png" alt="" />
+          <img src={rewardImagePath("alphago")} alt="" />
           <span>ALPHAGO</span>
         </div>
       </div>
@@ -2622,7 +2647,7 @@ function TeaMakerPanel() {
           <span className={`pill ${serialConnected ? "ok" : "done"}`}>{serialStatusLabel(machineStatus)}</span>
         </div>
         <div className="teaDeviceHero">
-          <img src="/rewards/iced-tea.png" alt="아이스티" />
+          <img src={rewardImagePath("alphago")} alt="아이스티" />
           <div>
             <strong>아이스티</strong>
             <span>Automatic Ice-Tea Maker</span>
@@ -2788,8 +2813,11 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<AppTab>(initialTab);
   const [toast, setToast] = useState("");
+  const [noticeAlert, setNoticeAlert] = useState<ClubNoticeView | null>(null);
   const [stampEffect, setStampEffect] = useState<StampEffectState | null>(null);
   const previousStampCountRef = useRef<number | null>(null);
+  const noticeSeenRef = useRef<string | null>(null);
+  const noticeAlertTimerRef = useRef<number | null>(null);
 
   const showStampEffect = useCallback((effect: Omit<StampEffectState, "id">) => {
     const next = { ...effect, id: Date.now() };
@@ -2831,6 +2859,63 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
     }, 6000);
     return () => window.clearInterval(timer);
   }, [me.account?.role, me.account?.displayNameRequired, refresh]);
+
+  useEffect(() => {
+    const account = me.account;
+    if (!account || (account.role === "participant" && account.displayNameRequired)) {
+      noticeSeenRef.current = null;
+      setNoticeAlert(null);
+      return;
+    }
+
+    let cancelled = false;
+    const storageKey = `wshsLastNotice:${account.id}`;
+
+    async function checkNotices(initial = false) {
+      const data = await apiJson<NoticePayload>("/api/notices", { method: "GET" });
+      if (cancelled) return;
+      const latest = data.notices[0];
+      if (!latest) return;
+
+      const storedLatestId = window.localStorage.getItem(storageKey);
+      const seenId = noticeSeenRef.current || storedLatestId;
+
+      if (initial) {
+        noticeSeenRef.current = seenId || latest.id;
+        if (!storedLatestId) window.localStorage.setItem(storageKey, latest.id);
+        return;
+      }
+
+      if (!seenId) {
+        noticeSeenRef.current = latest.id;
+        window.localStorage.setItem(storageKey, latest.id);
+        return;
+      }
+
+      if (latest.id === seenId) return;
+      noticeSeenRef.current = latest.id;
+      window.localStorage.setItem(storageKey, latest.id);
+      setNoticeAlert(latest);
+      if (noticeAlertTimerRef.current) window.clearTimeout(noticeAlertTimerRef.current);
+      noticeAlertTimerRef.current = window.setTimeout(() => {
+        setNoticeAlert((current) => (current?.id === latest.id ? null : current));
+        noticeAlertTimerRef.current = null;
+      }, 7000);
+    }
+
+    checkNotices(true).catch(() => undefined);
+    const timer = window.setInterval(() => {
+      checkNotices(false).catch(() => undefined);
+    }, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      if (noticeAlertTimerRef.current) {
+        window.clearTimeout(noticeAlertTimerRef.current);
+        noticeAlertTimerRef.current = null;
+      }
+    };
+  }, [me.account?.id, me.account?.role, me.account?.displayNameRequired]);
 
   const role = me.account?.role;
   const rewards = me.rewards || [];
@@ -2876,6 +2961,11 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
     await apiJson("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
     setMe({ account: null });
     setTab("home");
+  }
+
+  function openNoticeAlert() {
+    setNoticeAlert(null);
+    setTab(role === "participant" ? "home" : "notices");
   }
 
   const handleStampScan = useCallback(async (token: string, booth: BoothView) => {
@@ -2942,6 +3032,16 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
         ))}
       </nav>
 
+      {noticeAlert && (
+        <button className="noticeAlert" onClick={openNoticeAlert} type="button">
+          <span>공지</span>
+          <div>
+            <strong>{noticeAlert.clubName}</strong>
+            <p>{noticeAlert.message}</p>
+          </div>
+          <small>{formatTime(noticeAlert.createdAt)}</small>
+        </button>
+      )}
       {toast && <p className={toast.includes("완료") ? "toast okToast" : "toast errorToast"}>{toast}</p>}
       {stampEffect && <StampEffect effect={stampEffect} />}
 
@@ -2959,6 +3059,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
         <div className="gridTwo">
           <section className="panel rewardAdminCard">
             <h2>쿠폰 사용</h2>
+            <RewardImage reward={rewards.find((reward) => reward.id === me.account?.rewardId)} />
             <p>{rewardLabel(rewards.find((reward) => reward.id === me.account?.rewardId))}</p>
             {rewardDetail(me.account?.rewardId) && <small>{rewardDetail(me.account?.rewardId)}</small>}
             <strong>{me.redeemedCount || 0}</strong>
