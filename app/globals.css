@@ -865,6 +865,94 @@ th {
   font-weight: 800;
 }
 
+.tempPassPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.tempControls {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(150px, 0.8fr) auto auto;
+}
+
+.tempSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.tempSummary div {
+  border-bottom: 0;
+  border-right: 1px solid var(--line);
+}
+
+.tempSummary div:last-child {
+  border-right: 0;
+}
+
+.tempPassGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(164px, 1fr));
+}
+
+.tempPassCard {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.tempPassCard.selected {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.tempPassCard > div:first-child {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tempPassCard strong {
+  font-size: 15px;
+}
+
+.tempPassCard img,
+.usedQr {
+  aspect-ratio: 1;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  width: 100%;
+}
+
+.tempPassCard img {
+  object-fit: contain;
+  padding: 8px;
+}
+
+.usedQr {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 13px;
+  font-weight: 850;
+  justify-content: center;
+}
+
+.tempPassCard p,
+.tempPassCard small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  margin: 0;
+}
+
 @media (max-width: 860px) {
   .authShell,
   .gridTwo,
@@ -881,8 +969,17 @@ th {
 
   .rewardRail,
   .rewardGrid,
-  .metricGrid {
+  .metricGrid,
+  .tempSummary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tempControls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tempSummary div {
+    border-bottom: 1px solid var(--line);
   }
 
   .topBar {
@@ -911,8 +1008,14 @@ th {
 @media (max-width: 540px) {
   .rewardRail,
   .rewardGrid,
-  .metricGrid {
+  .metricGrid,
+  .tempSummary,
+  .tempControls {
     grid-template-columns: 1fr;
+  }
+
+  .tempSummary div {
+    border-right: 0;
   }
 
   .flowItem {

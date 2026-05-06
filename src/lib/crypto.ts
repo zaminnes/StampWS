@@ -99,6 +99,23 @@ export async function verifyCouponQrToken(token: string) {
   return { couponId };
 }
 
+export async function createTempPassQrToken(tempPassId: string, qrVersion: number) {
+  const payload = `tempPass:${tempPassId}:${qrVersion}`;
+  const signature = await signPayload(payload);
+  return `t.${tempPassId}.${qrVersion}.${signature}`;
+}
+
+export async function verifyTempPassQrToken(token: string) {
+  const parts = token.split(".");
+  if (parts.length !== 4 || parts[0] !== "t") return null;
+  const [, tempPassId, versionText, signature] = parts;
+  const qrVersion = Number(versionText);
+  if (!/^tmp_[A-Za-z0-9_-]+$/.test(tempPassId) || !Number.isInteger(qrVersion)) return null;
+  const payload = `tempPass:${tempPassId}:${qrVersion}`;
+  if (!(await verifySignature(payload, signature))) return null;
+  return { tempPassId, qrVersion };
+}
+
 const RESERVED_NAME_WORDS = ["admin", "staff", "super", "관리자", "운영자", "부스관리자", "총괄"];
 
 export function sanitizeDisplayName(value: string) {

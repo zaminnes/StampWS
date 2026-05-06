@@ -14,6 +14,7 @@ import type {
   Session,
   Stamp,
   StampDb,
+  TempPass,
   UserStats
 } from "./types";
 import { hashPassword, hashToken, normalizeInviteCode, randomCode, randomId } from "./crypto";
@@ -34,6 +35,7 @@ const COLLECTIONS = {
   rewards: "stampAppRewards",
   stamps: "stampAppStamps",
   coupons: "stampAppCoupons",
+  tempPasses: "stampAppTempPasses",
   profiles: "stampAppProfiles",
   userStats: "stampAppUserStats",
   nameChangeLogs: "stampAppNameChangeLogs",
@@ -219,6 +221,7 @@ async function buildInitialDb() {
     rewards: REWARDS,
     stamps: [],
     coupons: [],
+    tempPasses: [],
     profiles: [],
     userStats: [],
     nameChangeLogs: [],
@@ -378,6 +381,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
   const rewards = await listCollection<RewardItem>("rewards");
   const stamps = await listCollection<Stamp>("stamps");
   const coupons = await listCollection<Coupon>("coupons");
+  const tempPasses = await listCollection<TempPass>("tempPasses");
   const profiles = await listCollection<Profile>("profiles");
   const userStats = await listCollection<UserStats>("userStats");
   const nameChangeLogs = await listCollection<NameChangeLog>("nameChangeLogs");
@@ -393,6 +397,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       rewards: rewards.items,
       stamps: stamps.items,
       coupons: coupons.items,
+      tempPasses: tempPasses.items,
       profiles: profiles.items,
       userStats: userStats.items,
       nameChangeLogs: nameChangeLogs.items,
@@ -407,6 +412,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       rewards: rewards.payloads,
       stamps: stamps.payloads,
       coupons: coupons.payloads,
+      tempPasses: tempPasses.payloads,
       profiles: profiles.payloads,
       userStats: userStats.payloads,
       nameChangeLogs: nameChangeLogs.payloads,
@@ -420,6 +426,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       rewards: rewards.names,
       stamps: stamps.names,
       coupons: coupons.names,
+      tempPasses: tempPasses.names,
       profiles: profiles.names,
       userStats: userStats.names,
       nameChangeLogs: nameChangeLogs.names,
@@ -437,6 +444,7 @@ function emptyPayloadMaps(): Record<CollectionKey, Map<string, string>> {
     rewards: new Map(),
     stamps: new Map(),
     coupons: new Map(),
+    tempPasses: new Map(),
     profiles: new Map(),
     userStats: new Map(),
     nameChangeLogs: new Map(),
@@ -453,6 +461,7 @@ function emptyNameSets(): Record<CollectionKey, Set<string>> {
     rewards: new Set(),
     stamps: new Set(),
     coupons: new Set(),
+    tempPasses: new Set(),
     profiles: new Set(),
     userStats: new Set(),
     nameChangeLogs: new Set(),
@@ -514,6 +523,7 @@ async function commitFirestoreDb(db: StampDb, snapshot: FirestoreSnapshot) {
   addCollectionWrites(writes, "rewards", db.rewards, snapshot.payloads.rewards, snapshot.names.rewards);
   addCollectionWrites(writes, "stamps", db.stamps, snapshot.payloads.stamps, snapshot.names.stamps);
   addCollectionWrites(writes, "coupons", db.coupons, snapshot.payloads.coupons, snapshot.names.coupons);
+  addCollectionWrites(writes, "tempPasses", db.tempPasses, snapshot.payloads.tempPasses, snapshot.names.tempPasses);
   addCollectionWrites(writes, "profiles", db.profiles, snapshot.payloads.profiles, snapshot.names.profiles);
   addCollectionWrites(writes, "userStats", db.userStats, snapshot.payloads.userStats, snapshot.names.userStats);
   addCollectionWrites(writes, "nameChangeLogs", db.nameChangeLogs, snapshot.payloads.nameChangeLogs, snapshot.names.nameChangeLogs);
@@ -531,9 +541,14 @@ async function commitFirestoreDb(db: StampDb, snapshot: FirestoreSnapshot) {
 
 async function readFirestoreDb() {
   const snapshot = await readFirestoreSnapshot();
-  if (snapshot.db) return snapshot.db;
+  if (snapshot.db) return normalizeDb(snapshot.db);
   const { db } = await buildInitialDb();
   await commitFirestoreDb(db, snapshot);
+  return db;
+}
+
+function normalizeDb(db: StampDb) {
+  db.tempPasses ||= [];
   return db;
 }
 
@@ -541,7 +556,7 @@ export async function readDb() {
   if (useFirestoreBackend()) return readFirestoreDb();
   await ensureLocalDb();
   const raw = await fs.readFile(DB_FILE, "utf8");
-  return JSON.parse(raw) as StampDb;
+  return normalizeDb(JSON.parse(raw) as StampDb);
 }
 
 async function writeLocalDb(db: StampDb) {

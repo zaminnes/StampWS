@@ -86,6 +86,27 @@ export type Coupon = {
   redeemedByAccountId?: string;
 };
 
+export type TempPassStamp = {
+  boothId: string;
+  boothName: string;
+  stampImageDataUrl: string;
+  issuedByAdminId: string;
+  createdAt: string;
+};
+
+export type TempPass = {
+  id: string;
+  label: string;
+  qrVersion: number;
+  status: "active" | "redeemed" | "voided";
+  stamps: TempPassStamp[];
+  issuedByAccountId: string;
+  createdAt: string;
+  redeemedAt?: string;
+  redeemedByAccountId?: string;
+  redeemedRewardId?: RewardId;
+};
+
 export type Profile = {
   accountId: string;
   nickname: string;
@@ -142,6 +163,7 @@ export type StampDb = {
   rewards: RewardItem[];
   stamps: Stamp[];
   coupons: Coupon[];
+  tempPasses: TempPass[];
   profiles: Profile[];
   userStats: UserStats[];
   nameChangeLogs: NameChangeLog[];

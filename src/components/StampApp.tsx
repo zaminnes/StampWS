@@ -40,6 +40,47 @@ type LeaderboardRow = {
   completedSevenAt?: string;
 };
 
+type TempPassView = {
+  id: string;
+  label: string;
+  status: "active" | "redeemed" | "voided";
+  stampCount: number;
+  createdAt: string;
+  redeemedAt?: string;
+  redeemedRewardId?: Reward["id"];
+  qrToken?: string | null;
+};
+
+type PrinterType = "normal" | "mini";
+
+type BluetoothWriteCharacteristic = {
+  writeValue?: (value: Uint8Array) => Promise<void>;
+  writeValueWithoutResponse?: (value: Uint8Array) => Promise<void>;
+};
+
+type BluetoothService = {
+  getCharacteristic: (uuid: string) => Promise<BluetoothWriteCharacteristic>;
+};
+
+type BluetoothServer = {
+  getPrimaryService: (uuid: string) => Promise<BluetoothService>;
+};
+
+type BluetoothDevice = {
+  gatt?: {
+    connect: () => Promise<BluetoothServer>;
+  };
+};
+
+type BluetoothNavigator = Navigator & {
+  bluetooth?: {
+    requestDevice: (options: {
+      filters: Array<{ namePrefix: string }>;
+      optionalServices: string[];
+    }) => Promise<BluetoothDevice>;
+  };
+};
+
 type MePayload = {
   account: null | {
     id: string;
@@ -92,11 +133,13 @@ type MePayload = {
     stampCount: number;
     couponCount: number;
     redeemedCouponCount: number;
+    tempPassCount: number;
+    redeemedTempPassCount: number;
   };
 };
 
 type AuthMode = "login" | "register" | "adminJoin";
-type AppTab = "home" | "profile" | "leaderboard" | "boothScan" | "stampStudio" | "rewardScan" | "codes" | "admin";
+type AppTab = "home" | "profile" | "leaderboard" | "boothScan" | "stampStudio" | "rewardScan" | "codes" | "admin" | "tempPasses";
 
 async function apiJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -133,6 +176,162 @@ function roleLabel(role?: Role) {
   if (role === "rewardAdmin") return "보상";
   if (role === "superAdmin") return "총괄";
   return "-";
+}
+
+const PRINTER_WIDTHS: Record<PrinterType, number> = {
+  normal: 576,
+  mini: 384
+};
+
+const PRINTER_SERVICES = [
+  { service: "00005000-d102-11e1-9b23-74f07d000000", write: "00005001-d102-11e1-9b23-74f07d000000" },
+  { service: "3b790000-923e-4f69-b794-74f07d000000", write: "3b790002-923e-4f69-b794-74f07d000000" },
+  { service: "49535343-fe78-4ae5-8fa9-9fafd205e455", write: "49535343-8841-43f4-a8d4-ecbe34729bb3" }
+];
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function loadCanvasImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("QR 이미지를 만들지 못했습니다."));
+    image.src = src;
+  });
+}
+
+function drawCenteredText(context: CanvasRenderingContext2D, text: string, y: number, width: number, size: number, weight = 800) {
+  context.fillStyle = "#111827";
+  context.font = `${weight} ${size}px Inter, Apple SD Gothic Neo, Arial, sans-serif`;
+  context.textAlign = "center";
+  context.textBaseline = "top";
+  context.fillText(text, width / 2, y);
+}
+
+async function renderTempPassCanvas(pass: TempPassView, printerType: PrinterType) {
+  if (!pass.qrToken) throw new Error("인쇄할 QR 토큰이 없습니다.");
+  const width = PRINTER_WIDTHS[printerType];
+  const height = printerType === "mini" ? 360 : 420;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("인쇄 캔버스를 만들지 못했습니다.");
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.strokeStyle = "#111827";
+  context.lineWidth = 2;
+  context.strokeRect(14, 14, width - 28, height - 28);
+
+  drawCenteredText(context, "WSHS SCIENCE", 34, width, printerType === "mini" ? 22 : 26, 900);
+  drawCenteredText(context, pass.label, printerType === "mini" ? 68 : 76, width, printerType === "mini" ? 30 : 38, 900);
+
+  const qrSize = printerType === "mini" ? 188 : 244;
+  const qrX = Math.round((width - qrSize) / 2);
+  const qrY = printerType === "mini" ? 116 : 138;
+  const qrImage = await loadCanvasImage(`/api/qr?value=${encodeURIComponent(pass.qrToken)}`);
+  context.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+
+  drawCenteredText(context, "7개 완료 후 보상 부스 스캔", qrY + qrSize + 22, width, printerType === "mini" ? 18 : 22, 800);
+  drawCenteredText(context, "랭킹 제외", qrY + qrSize + (printerType === "mini" ? 48 : 56), width, printerType === "mini" ? 14 : 16, 700);
+
+  return canvas;
+}
+
+function canvasToPrinterBitmap(canvas: HTMLCanvasElement) {
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("인쇄 데이터를 만들지 못했습니다.");
+  const { width, height } = canvas;
+  const imageData = context.getImageData(0, 0, width, height);
+  const bytesPerLine = Math.ceil(width / 8);
+  const bitmap = new Uint8Array(bytesPerLine * height);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const gray = imageData.data[index] * 0.299 + imageData.data[index + 1] * 0.587 + imageData.data[index + 2] * 0.114;
+      if (gray < 160) {
+        bitmap[y * bytesPerLine + Math.floor(x / 8)] |= 1 << (7 - (x % 8));
+      }
+    }
+  }
+
+  const header = new Uint8Array([
+    0x1d,
+    0x76,
+    0x30,
+    0x00,
+    bytesPerLine & 0xff,
+    (bytesPerLine >> 8) & 0xff,
+    height & 0xff,
+    (height >> 8) & 0xff
+  ]);
+  const packet = new Uint8Array(header.length + bitmap.length);
+  packet.set(header, 0);
+  packet.set(bitmap, header.length);
+  return packet;
+}
+
+async function writePrinter(characteristic: BluetoothWriteCharacteristic, data: Uint8Array) {
+  if (characteristic.writeValueWithoutResponse) {
+    await characteristic.writeValueWithoutResponse(data);
+    return;
+  }
+  if (characteristic.writeValue) {
+    await characteristic.writeValue(data);
+    return;
+  }
+  throw new Error("프린터 쓰기 기능을 찾지 못했습니다.");
+}
+
+async function connectNemonicPrinter() {
+  const bluetooth = (navigator as BluetoothNavigator).bluetooth;
+  if (!bluetooth) {
+    throw new Error("Chrome 또는 Edge에서 블루투스를 켜주세요.");
+  }
+
+  const device = await bluetooth.requestDevice({
+    filters: [{ namePrefix: "nemonic" }, { namePrefix: "Nemonic" }],
+    optionalServices: PRINTER_SERVICES.map((item) => item.service)
+  });
+  const server = await device.gatt?.connect();
+  if (!server) throw new Error("프린터 연결에 실패했습니다.");
+
+  for (const item of PRINTER_SERVICES) {
+    try {
+      const service = await server.getPrimaryService(item.service);
+      return await service.getCharacteristic(item.write);
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error("네모닉 프린터 서비스를 찾지 못했습니다.");
+}
+
+async function printTempPasses(passes: TempPassView[], printerType: PrinterType, onProgress: (progress: number) => void) {
+  const printable = passes.filter((pass) => pass.status === "active" && pass.qrToken);
+  if (printable.length === 0) throw new Error("인쇄할 임시 QR이 없습니다.");
+
+  onProgress(5);
+  const characteristic = await connectNemonicPrinter();
+  onProgress(12);
+
+  for (const [index, pass] of printable.entries()) {
+    const canvas = await renderTempPassCanvas(pass, printerType);
+    const packet = canvasToPrinterBitmap(canvas);
+    for (let offset = 0; offset < packet.length; offset += 100) {
+      await writePrinter(characteristic, packet.slice(offset, Math.min(offset + 100, packet.length)));
+      await delay(10);
+    }
+    await delay(700);
+    await writePrinter(characteristic, new Uint8Array([0x1b, 0x69]));
+    await delay(350);
+    onProgress(12 + Math.round(((index + 1) / printable.length) * 88));
+  }
 }
 
 function QrImage({ token, label }: { token: string; label: string }) {
@@ -747,6 +946,128 @@ function CodesPanel() {
   );
 }
 
+function tempPassStatus(pass: TempPassView) {
+  if (pass.status === "redeemed") return "지급 완료";
+  if (pass.status === "voided") return "중지";
+  if (pass.stampCount >= 7) return "보상 가능";
+  return "진행";
+}
+
+function TempPassPanel() {
+  const [passes, setPasses] = useState<TempPassView[]>([]);
+  const [lastCreatedIds, setLastCreatedIds] = useState<Set<string>>(new Set());
+  const [count, setCount] = useState(4);
+  const [printerType, setPrinterType] = useState<PrinterType>("normal");
+  const [busy, setBusy] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState("");
+
+  const load = useCallback(async () => {
+    const data = await apiJson<{ passes: TempPassView[] }>("/api/admin/temp-passes");
+    setPasses(data.passes);
+  }, []);
+
+  useEffect(() => {
+    load().catch((err) => setMessage(err instanceof Error ? err.message : "임시 QR 로드 실패"));
+  }, [load]);
+
+  const printTargets = passes.filter((pass) =>
+    lastCreatedIds.size > 0 ? lastCreatedIds.has(pass.id) && pass.status === "active" : pass.status === "active"
+  );
+
+  async function createPasses() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const data = await apiJson<{ created: TempPassView[] }>("/api/admin/temp-passes", {
+        method: "POST",
+        body: JSON.stringify({ count })
+      });
+      setLastCreatedIds(new Set(data.created.map((pass) => pass.id)));
+      await load();
+      setMessage(`${data.created.length}개 생성`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "생성 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function printPasses() {
+    setPrinting(true);
+    setProgress(0);
+    setMessage("");
+    try {
+      await printTempPasses(printTargets, printerType, setProgress);
+      setMessage("인쇄 완료");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "인쇄 실패");
+    } finally {
+      setPrinting(false);
+    }
+  }
+
+  return (
+    <section className="panel tempPassPanel">
+      <div className="sectionHeader">
+        <div>
+          <h2>임시 QR</h2>
+          <p>폰 없는 참가자용.</p>
+        </div>
+        <button className="secondaryButton" onClick={load} type="button">새로고침</button>
+      </div>
+
+      <div className="tempControls">
+        <label>
+          생성 수
+          <input min={1} max={40} type="number" value={count} onChange={(event) => setCount(Number(event.target.value))} />
+        </label>
+        <label>
+          프린터
+          <select value={printerType} onChange={(event) => setPrinterType(event.target.value as PrinterType)}>
+            <option value="normal">일반</option>
+            <option value="mini">미니</option>
+          </select>
+        </label>
+        <button className="primaryButton" disabled={busy} onClick={createPasses} type="button">
+          {busy ? "처리중" : "생성"}
+        </button>
+        <button className="secondaryButton" disabled={printing || printTargets.length === 0} onClick={printPasses} type="button">
+          {printing ? `${progress}%` : "인쇄"}
+        </button>
+      </div>
+
+      <div className="summaryRows tempSummary">
+        <div><span>인쇄 대상</span><strong>{printTargets.length}개</strong></div>
+        <div><span>사용 가능</span><strong>{passes.filter((pass) => pass.status === "active").length}개</strong></div>
+        <div><span>랭킹</span><strong>제외</strong></div>
+      </div>
+
+      {message && <p className={message.includes("완료") || message.includes("생성") ? "statusText" : "errorText"}>{message}</p>}
+
+      <div className="tempPassGrid">
+        {passes.map((pass) => (
+          <div className={`tempPassCard ${lastCreatedIds.has(pass.id) ? "selected" : ""}`} key={pass.id}>
+            <div>
+              <strong>{pass.label}</strong>
+              <span className={`pill ${pass.status === "active" ? "ok" : "done"}`}>{tempPassStatus(pass)}</span>
+            </div>
+            {pass.qrToken ? (
+              <img src={`/api/qr?value=${encodeURIComponent(pass.qrToken)}`} alt={`${pass.label} QR`} />
+            ) : (
+              <div className="usedQr">완료</div>
+            )}
+            <p>스탬프 {pass.stampCount}/7</p>
+            <small>{pass.redeemedAt ? formatTime(pass.redeemedAt) : formatTime(pass.createdAt)}</small>
+          </div>
+        ))}
+        {passes.length === 0 && <p className="emptyText">생성된 QR 없음</p>}
+      </div>
+    </section>
+  );
+}
+
 function Leaderboard() {
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [error, setError] = useState("");
@@ -826,6 +1147,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
     ] as Array<[AppTab, string]>;
     return [
       ["admin", "총괄"],
+      ["tempPasses", "임시"],
       ["codes", "코드"],
       ["leaderboard", "랭킹"]
     ] as Array<[AppTab, string]>;
@@ -902,6 +1224,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       {tab === "leaderboard" && <Leaderboard />}
       {tab === "stampStudio" && <StampStudio me={me} refresh={refresh} />}
       {tab === "boothScan" && <Scanner label="QR 지급" onScan={handleStampScan} />}
+      {tab === "tempPasses" && role === "superAdmin" && <TempPassPanel />}
       {tab === "rewardScan" && (
         <div className="gridTwo">
           <section className="panel rewardAdminCard">
@@ -927,6 +1250,8 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
             <div><strong>{me.adminSummary?.stampCount || 0}</strong><span>스탬프</span></div>
             <div><strong>{me.adminSummary?.couponCount || 0}</strong><span>쿠폰</span></div>
             <div><strong>{me.adminSummary?.redeemedCouponCount || 0}</strong><span>사용 완료</span></div>
+            <div><strong>{me.adminSummary?.tempPassCount || 0}</strong><span>임시 QR</span></div>
+            <div><strong>{me.adminSummary?.redeemedTempPassCount || 0}</strong><span>임시 지급</span></div>
           </div>
         </section>
       )}

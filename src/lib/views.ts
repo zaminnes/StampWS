@@ -102,7 +102,9 @@ export async function buildMePayload(account: Account, db: StampDb) {
     return {
       ...base,
       reward,
-      redeemedCount: db.coupons.filter((coupon) => coupon.redeemedByAccountId === account.id).length
+      redeemedCount:
+        db.coupons.filter((coupon) => coupon.redeemedByAccountId === account.id).length +
+        db.tempPasses.filter((pass) => pass.redeemedByAccountId === account.id).length
     };
   }
 
@@ -113,7 +115,9 @@ export async function buildMePayload(account: Account, db: StampDb) {
       participantCount: db.accounts.filter((item) => item.role === "participant").length,
       stampCount: db.stamps.filter((stamp) => !stamp.voided).length,
       couponCount: db.coupons.length,
-      redeemedCouponCount: db.coupons.filter((coupon) => coupon.status === "redeemed").length
+      redeemedCouponCount: db.coupons.filter((coupon) => coupon.status === "redeemed").length,
+      tempPassCount: db.tempPasses.length,
+      redeemedTempPassCount: db.tempPasses.filter((pass) => pass.status === "redeemed").length
     }
   };
 }
