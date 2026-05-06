@@ -1052,6 +1052,9 @@ function TeaReservationCard() {
 
   const activeReservation = reservations.find((reservation) => ["reserved", "brewing", "ready"].includes(reservation.status));
   const latestReservation = activeReservation || reservations[0];
+  const recentReservations = reservations.slice(0, 3);
+  const reservationStatus = latestReservation ? teaReservationStatus(latestReservation.status) : "주문 가능";
+  const reservationTime = latestReservation ? formatTime(latestReservation.updatedAt) : "바로 예약";
 
   async function createReservation() {
     setBusy(true);
@@ -1072,28 +1075,56 @@ function TeaReservationCard() {
   }
 
   return (
-    <section className="panel teaReservePanel widePanel">
-      <div className="sectionHeader">
-        <div>
-          <h2>티 예약</h2>
-          <p>알파고 아이스티.</p>
+    <section className="panel teaCustomerPanel widePanel">
+      <div className="teaCustomerHero">
+        <div className="teaHeroCopy">
+          <span className={`teaStatusChip ${latestReservation?.status || "idle"}`}>{reservationStatus}</span>
+          <h2>아이스티</h2>
+          <p>Automatic Ice-Tea Maker</p>
+          <div className="teaHeroMetrics">
+            <div>
+              <span>번호</span>
+              <strong>{latestReservation ? `#${latestReservation.orderNumber}` : "-"}</strong>
+            </div>
+            <div>
+              <span>시간</span>
+              <strong>{reservationTime}</strong>
+            </div>
+          </div>
         </div>
-        <span className="pill ok">아이스티</span>
-      </div>
-      <div className="teaReserveLayout">
-        <img src="/rewards/iced-tea.png" alt="알파고 아이스티" />
-        <div>
-          <strong>{latestReservation ? `#${latestReservation.orderNumber} ${teaReservationStatus(latestReservation.status)}` : "예약 없음"}</strong>
-          <span>{latestReservation ? formatTime(latestReservation.updatedAt) : "온라인 예약구매"}</span>
+        <div className="teaProductStage" aria-hidden="true">
+          <img src="/rewards/iced-tea.png" alt="" />
+          <span>ALPHAGO</span>
         </div>
       </div>
-      <div className="inlineForm">
-        <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={60} placeholder="요청 메모" />
-        <button disabled={busy || Boolean(activeReservation)} onClick={createReservation} type="button">
+
+      <div className="teaReserveAction">
+        <label>
+          <span>요청 메모</span>
+          <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={60} placeholder="얼음 적게" />
+        </label>
+        <button className="teaReserveCta" disabled={busy || Boolean(activeReservation)} onClick={createReservation} type="button">
           {busy ? "처리중" : activeReservation ? "진행중" : "예약구매"}
         </button>
       </div>
       {message && <p className={message.includes("실패") || message.includes("진행") ? "errorText" : "statusText"}>{message}</p>}
+
+      <div className="teaRecentBox">
+        <div className="teaRecentHead">
+          <strong>최근 예약</strong>
+          <span>{reservations.length}건</span>
+        </div>
+        <div className="teaRecentList">
+          {recentReservations.map((reservation) => (
+            <div className="teaRecentItem" key={reservation.id}>
+              <span>#{reservation.orderNumber}</span>
+              <strong>{teaReservationStatus(reservation.status)}</strong>
+              <small>{formatTime(reservation.updatedAt)}</small>
+            </div>
+          ))}
+          {recentReservations.length === 0 && <p className="emptyText">아직 없음</p>}
+        </div>
+      </div>
     </section>
   );
 }

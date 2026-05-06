@@ -898,12 +898,232 @@ textarea {
   font-weight: 800;
 }
 
-.teaReservePanel {
+.teaCustomerPanel {
   display: grid;
-  gap: 14px;
+  gap: 16px;
+  overflow: hidden;
 }
 
-.teaReserveLayout,
+.teaCustomerHero {
+  align-items: stretch;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
+  border: 1px solid #dbeafe;
+  border-radius: 18px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  min-height: 218px;
+  padding: 22px;
+  position: relative;
+}
+
+.teaHeroCopy {
+  align-content: center;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.teaHeroCopy h2 {
+  color: #0f172a;
+  font-size: clamp(30px, 4vw, 42px);
+  letter-spacing: 0;
+  line-height: 1;
+  margin: 0;
+}
+
+.teaHeroCopy p {
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 850;
+  margin: 0;
+}
+
+.teaStatusChip {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  justify-content: center;
+  justify-self: start;
+  min-height: 30px;
+  padding: 7px 11px;
+}
+
+.teaStatusChip.ready {
+  background: var(--success-bg);
+  border-color: #bbf7d0;
+  color: var(--success);
+}
+
+.teaStatusChip.brewing {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.teaStatusChip.cancelled {
+  background: var(--danger-bg);
+  border-color: #fecaca;
+  color: var(--danger);
+}
+
+.teaHeroMetrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 120px));
+}
+
+.teaHeroMetrics div {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  border-radius: 14px;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.teaHeroMetrics span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.teaHeroMetrics strong {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teaProductStage {
+  align-items: center;
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(191, 219, 254, 0.85);
+  border-radius: 18px;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  min-width: 0;
+  padding: 16px;
+}
+
+.teaProductStage img {
+  aspect-ratio: 1;
+  object-fit: contain;
+  width: min(132px, 100%);
+}
+
+.teaProductStage span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.teaReserveAction {
+  align-items: end;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  padding: 14px;
+}
+
+.teaReserveAction label {
+  display: grid;
+  gap: 7px;
+}
+
+.teaReserveAction label span {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.teaReserveAction input {
+  min-width: 0;
+  width: 100%;
+}
+
+.teaReserveCta {
+  background: #2563eb;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 10px 14px;
+}
+
+.teaReserveCta:hover {
+  background: #1d4ed8;
+}
+
+.teaRecentBox {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.teaRecentHead {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.teaRecentHead strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.teaRecentHead span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.teaRecentList {
+  display: grid;
+  gap: 8px;
+}
+
+.teaRecentItem {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 72px 1fr auto;
+  min-height: 48px;
+  padding: 10px 12px;
+}
+
+.teaRecentItem span,
+.teaRecentItem small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.teaRecentItem strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+}
+
 .teaDeviceHero {
   align-items: center;
   background: var(--surface-soft);
@@ -915,7 +1135,6 @@ textarea {
   padding: 12px;
 }
 
-.teaReserveLayout img,
 .teaDeviceHero img {
   aspect-ratio: 1;
   background: #fff;
@@ -926,14 +1145,12 @@ textarea {
   width: 72px;
 }
 
-.teaReserveLayout strong,
 .teaDeviceHero strong {
   display: block;
   font-size: 17px;
   margin-bottom: 4px;
 }
 
-.teaReserveLayout span,
 .teaDeviceHero span {
   color: var(--muted);
   font-size: 13px;
@@ -1589,8 +1806,13 @@ th {
 
   .accountTools,
   .boothNameRow,
+  .teaCustomerHero,
   .teaQueueRow {
     grid-template-columns: 1fr;
+  }
+
+  .teaProductStage {
+    min-height: 156px;
   }
 
   .teaQueueActions {
@@ -1652,6 +1874,20 @@ th {
 
   .sectionHeader {
     display: grid;
+  }
+
+  .teaCustomerHero {
+    padding: 18px;
+  }
+
+  .teaHeroMetrics,
+  .teaReserveAction,
+  .teaRecentItem {
+    grid-template-columns: 1fr;
+  }
+
+  .teaReserveCta {
+    width: 100%;
   }
 
   .tabBar {
