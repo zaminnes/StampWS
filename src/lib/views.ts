@@ -42,7 +42,7 @@ function resolveStampImage(stampImageDataUrl: string, db: StampDb) {
   if (!stampImageDataUrl.startsWith("booth:")) return stampImageDataUrl;
   const boothId = stampImageDataUrl.split(":")[1];
   const booth = db.booths.find((item) => item.id === boothId);
-  return booth?.stampImageDataUrl || defaultStampDataUrl(booth?.name || "STAMP");
+  return booth?.stampImageDataUrl || db.meta.defaultStampImageDataUrl || defaultStampDataUrl(booth?.name || "STAMP");
 }
 
 export async function buildMePayload(account: Account, db: StampDb) {
@@ -97,7 +97,13 @@ export async function buildMePayload(account: Account, db: StampDb) {
     const booth = db.booths.find((item) => item.id === account.boothId);
     return {
       ...base,
-      booth,
+      booth: booth
+        ? {
+            ...booth,
+            stampImageDataUrl: booth.stampImageDataUrl || db.meta.defaultStampImageDataUrl || defaultStampDataUrl(booth.name),
+            hasCustomStampImage: Boolean(booth.stampImageDataUrl)
+          }
+        : booth,
       issuedCount: db.stamps.filter((stamp) => stamp.issuedByAdminId === account.id && !stamp.voided).length
     };
   }
@@ -123,6 +129,7 @@ export async function buildMePayload(account: Account, db: StampDb) {
       redeemedCouponCount: db.coupons.filter((coupon) => coupon.status === "redeemed").length,
       tempPassCount: db.tempPasses.length,
       redeemedTempPassCount: db.tempPasses.filter((pass) => pass.status === "redeemed").length
-    }
+    },
+    defaultStampImageDataUrl: db.meta.defaultStampImageDataUrl || defaultStampDataUrl("WSHS")
   };
 }

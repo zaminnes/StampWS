@@ -158,6 +158,8 @@ export type StampDb = {
     createdAt: string;
     updatedAt: string;
     version: number;
+    defaultStampImageDataUrl?: string;
+    defaultStampUpdatedAt?: string;
   };
   accounts: Account[];
   sessions: Session[];

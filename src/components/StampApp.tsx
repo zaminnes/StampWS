@@ -57,6 +57,18 @@ type TempPassView = {
   qrToken?: string | null;
 };
 
+type AdminAccountRow = {
+  id: string;
+  loginId: string;
+  displayName: string;
+  studentCode?: string;
+  role: Role;
+  targetName: string;
+  disabled: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+};
+
 type PrinterType = "normal" | "mini";
 
 type BluetoothWriteCharacteristic = {
@@ -100,6 +112,13 @@ type MePayload = {
     selectedRewardId?: Reward["id"];
   };
   rewards?: Reward[];
+  booths?: Array<{
+    id: string;
+    name: string;
+    clubName: string;
+    active: boolean;
+    hasStampImage: boolean;
+  }>;
   participantQrToken?: string;
   profile?: {
     nickname: string;
@@ -131,6 +150,7 @@ type MePayload = {
     clubName: string;
     stampImageDataUrl?: string;
     stampDesignUpdatedAt?: string;
+    hasCustomStampImage?: boolean;
   };
   reward?: Reward;
   issuedCount?: number;
@@ -144,6 +164,7 @@ type MePayload = {
     tempPassCount: number;
     redeemedTempPassCount: number;
   };
+  defaultStampImageDataUrl?: string;
 };
 
 type AuthMode = "participant" | "adminLogin" | "adminJoin";
@@ -392,6 +413,114 @@ async function printTempPasses(passes: TempPassView[], printerType: PrinterType,
     await delay(350);
     onProgress(12 + Math.round(((index + 1) / printable.length) * 88));
   }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function browserPrintTempPasses(passes: TempPassView[], printerType: PrinterType) {
+  const printable = passes.filter((pass) => pass.status === "active" && pass.qrToken);
+  if (printable.length === 0) throw new Error("선택된 임시 QR이 없습니다.");
+
+  const pageWidth = printerType === "mini" ? "58mm" : "80mm";
+  const qrSize = printerType === "mini" ? "38mm" : "48mm";
+  const printWindow = window.open("", "_blank", "width=420,height=720");
+  if (!printWindow) throw new Error("팝업 차단을 해제한 뒤 다시 인쇄하세요.");
+
+  const pages = printable
+    .map((pass) => {
+      const qrSrc = `${window.location.origin}/api/qr?value=${encodeURIComponent(publicQrValue(pass.qrToken || ""))}`;
+      return `
+        <section class="ticket">
+          <div class="box">
+            <p class="eyebrow">WSHS SCIENCE</p>
+            <h1>${escapeHtml(fitText(pass.displayName || pass.label, 14))}</h1>
+            <img src="${qrSrc}" alt="${escapeHtml(pass.label)} QR" />
+            <strong>${escapeHtml(pass.label)}</strong>
+            <span>7개 완료 후 보상 부스 스캔</span>
+            <small>현장 임시권 · 랭킹 제외</small>
+          </div>
+        </section>
+      `;
+    })
+    .join("");
+
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>임시 QR 인쇄</title>
+        <style>
+          @page { size: ${pageWidth} auto; margin: 3mm; }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            background: #fff;
+            color: #111827;
+            font-family: Inter, Arial, Apple SD Gothic Neo, sans-serif;
+          }
+          .ticket {
+            page-break-after: always;
+            width: ${pageWidth};
+            padding: 2mm;
+          }
+          .ticket:last-child { page-break-after: auto; }
+          .box {
+            border: 1.5px solid #111827;
+            border-radius: 4mm;
+            display: grid;
+            gap: 2mm;
+            justify-items: center;
+            min-height: ${printerType === "mini" ? "78mm" : "96mm"};
+            padding: 5mm 3mm;
+            text-align: center;
+          }
+          .eyebrow {
+            font-size: ${printerType === "mini" ? "10pt" : "11pt"};
+            font-weight: 900;
+            letter-spacing: 0.04em;
+            margin: 0;
+          }
+          h1 {
+            font-size: ${printerType === "mini" ? "18pt" : "22pt"};
+            line-height: 1.08;
+            margin: 0;
+          }
+          img {
+            height: ${qrSize};
+            image-rendering: pixelated;
+            width: ${qrSize};
+          }
+          strong {
+            border: 1px solid #111827;
+            border-radius: 999px;
+            font-size: ${printerType === "mini" ? "10pt" : "11pt"};
+            padding: 1mm 3mm;
+          }
+          span {
+            font-size: ${printerType === "mini" ? "9pt" : "10pt"};
+            font-weight: 800;
+          }
+          small {
+            color: #4b5563;
+            font-size: ${printerType === "mini" ? "8pt" : "9pt"};
+            font-weight: 800;
+          }
+        </style>
+      </head>
+      <body>${pages}</body>
+    </html>`);
+  printWindow.document.close();
+  printWindow.focus();
+  window.setTimeout(() => {
+    printWindow.print();
+  }, 450);
 }
 
 function QrImage({ token, label }: { token: string; label: string }) {
@@ -1147,6 +1276,7 @@ function tempPassStatus(pass: TempPassView) {
 function TempPassPanel() {
   const [passes, setPasses] = useState<TempPassView[]>([]);
   const [lastCreatedIds, setLastCreatedIds] = useState<Set<string>>(new Set());
+  const [selectedPassIds, setSelectedPassIds] = useState<Set<string>>(new Set());
   const [count, setCount] = useState(4);
   const [displayNames, setDisplayNames] = useState("");
   const [printerType, setPrinterType] = useState<PrinterType>("normal");
@@ -1164,9 +1294,16 @@ function TempPassPanel() {
     load().catch((err) => setMessage(err instanceof Error ? err.message : "임시 QR 로드 실패"));
   }, [load]);
 
-  const printTargets = passes.filter((pass) =>
-    lastCreatedIds.size > 0 ? lastCreatedIds.has(pass.id) && pass.status === "active" : pass.status === "active"
-  );
+  const printTargets = passes.filter((pass) => selectedPassIds.has(pass.id) && pass.status === "active" && pass.qrToken);
+
+  function togglePass(passId: string) {
+    setSelectedPassIds((current) => {
+      const next = new Set(current);
+      if (next.has(passId)) next.delete(passId);
+      else next.add(passId);
+      return next;
+    });
+  }
 
   async function createPasses() {
     setBusy(true);
@@ -1176,7 +1313,9 @@ function TempPassPanel() {
         method: "POST",
         body: JSON.stringify({ count, displayNames })
       });
-      setLastCreatedIds(new Set(data.created.map((pass) => pass.id)));
+      const createdIds = new Set(data.created.map((pass) => pass.id));
+      setLastCreatedIds(createdIds);
+      setSelectedPassIds(createdIds);
       await load();
       setMessage(`${data.created.length}개 생성`);
       setDisplayNames("");
@@ -1192,12 +1331,34 @@ function TempPassPanel() {
     setProgress(0);
     setMessage("");
     try {
-      await printTempPasses(printTargets, printerType, setProgress);
-      setMessage("인쇄 완료");
+      browserPrintTempPasses(printTargets, printerType);
+      setProgress(100);
+      setMessage(`${printTargets.length}개 인쇄 열림`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "인쇄 실패");
     } finally {
       setPrinting(false);
+    }
+  }
+
+  async function deletePass(pass: TempPassView) {
+    const confirmLabel = window.prompt(`삭제하려면 ${pass.label} 을 정확히 입력하세요.`);
+    if (confirmLabel === null) return;
+    setMessage("");
+    try {
+      const data = await apiJson<{ passes: TempPassView[] }>("/api/admin/temp-passes", {
+        method: "DELETE",
+        body: JSON.stringify({ passId: pass.id, confirmLabel })
+      });
+      setPasses(data.passes);
+      setSelectedPassIds((current) => {
+        const next = new Set(current);
+        next.delete(pass.id);
+        return next;
+      });
+      setMessage(`${pass.label} 삭제`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "삭제 실패");
     }
   }
 
@@ -1233,10 +1394,13 @@ function TempPassPanel() {
         <button className="secondaryButton" disabled={printing || printTargets.length === 0} onClick={printPasses} type="button">
           {printing ? `${progress}%` : "인쇄"}
         </button>
+        <button className="secondaryButton" onClick={() => setSelectedPassIds(new Set(passes.filter((pass) => pass.status === "active").map((pass) => pass.id)))} type="button">
+          전체선택
+        </button>
       </div>
 
       <div className="summaryRows tempSummary">
-        <div><span>인쇄 대상</span><strong>{printTargets.length}개</strong></div>
+        <div><span>선택</span><strong>{printTargets.length}개</strong></div>
         <div><span>사용 가능</span><strong>{passes.filter((pass) => pass.status === "active").length}개</strong></div>
         <div><span>랭킹</span><strong>제외</strong></div>
       </div>
@@ -1247,7 +1411,10 @@ function TempPassPanel() {
         {passes.map((pass) => (
           <div className={`tempPassCard ${lastCreatedIds.has(pass.id) ? "selected" : ""}`} key={pass.id}>
             <div>
-              <strong>{pass.displayName}</strong>
+              <label className="checkLine">
+                <input checked={selectedPassIds.has(pass.id)} disabled={pass.status !== "active" || !pass.qrToken} onChange={() => togglePass(pass.id)} type="checkbox" />
+                <strong>{pass.displayName}</strong>
+              </label>
               <span className={`pill ${pass.status === "active" ? "ok" : "done"}`}>{tempPassStatus(pass)}</span>
             </div>
             <p className="tempPassLabel">{pass.label}</p>
@@ -1259,11 +1426,304 @@ function TempPassPanel() {
             <p>스탬프 {pass.stampCount}/7</p>
             {pass.redeemedRewardId && <p>{rewardNameById(pass.redeemedRewardId)}</p>}
             <small>{pass.redeemedAt ? formatTime(pass.redeemedAt) : formatTime(pass.createdAt)}</small>
+            <button className="dangerButton" onClick={() => deletePass(pass)} type="button">삭제</button>
           </div>
         ))}
         {passes.length === 0 && <p className="emptyText">생성된 QR 없음</p>}
       </div>
     </section>
+  );
+}
+
+function DefaultStampPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingRef = useRef(false);
+  const [color, setColor] = useState("#2563eb");
+  const [size, setSize] = useState(12);
+  const [previewDataUrl, setPreviewDataUrl] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    if (me.defaultStampImageDataUrl) {
+      const image = new Image();
+      image.onload = () => {
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        setPreviewDataUrl(canvas.toDataURL("image/png"));
+      };
+      image.src = me.defaultStampImageDataUrl;
+    } else {
+      setPreviewDataUrl(canvas.toDataURL("image/png"));
+    }
+  }, [me.defaultStampImageDataUrl]);
+
+  function point(event: React.PointerEvent<HTMLCanvasElement>) {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((event.clientY - rect.top) / rect.height) * canvas.height
+    };
+  }
+
+  function syncPreview() {
+    const canvas = canvasRef.current;
+    if (canvas) setPreviewDataUrl(canvas.toDataURL("image/png"));
+  }
+
+  function startDraw(event: React.PointerEvent<HTMLCanvasElement>) {
+    drawingRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const context = canvasRef.current?.getContext("2d");
+    const start = point(event);
+    context?.beginPath();
+    context?.moveTo(start.x, start.y);
+  }
+
+  function draw(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawingRef.current) return;
+    const context = canvasRef.current?.getContext("2d");
+    if (!context) return;
+    const next = point(event);
+    context.lineTo(next.x, next.y);
+    context.strokeStyle = color;
+    context.lineWidth = size;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.stroke();
+  }
+
+  function endDraw() {
+    drawingRef.current = false;
+    syncPreview();
+  }
+
+  function clearCanvas() {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    syncPreview();
+  }
+
+  async function saveDefaultStamp() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setMessage("");
+    try {
+      await apiJson("/api/admin/default-stamp", {
+        method: "POST",
+        body: JSON.stringify({ imageDataUrl: canvas.toDataURL("image/png") })
+      });
+      await refresh();
+      setMessage("기본 도장 저장");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "저장 실패");
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="sectionHeader">
+        <div>
+          <h2>기본 도장</h2>
+          <p>도장 없는 부스에 적용.</p>
+        </div>
+      </div>
+      <div className="canvasTools">
+        <label>
+          색상
+          <input type="color" value={color} onChange={(event) => setColor(event.target.value)} />
+        </label>
+        <label>
+          굵기
+          <input type="range" min={2} max={28} value={size} onChange={(event) => setSize(Number(event.target.value))} />
+        </label>
+        <button className="secondaryButton" onClick={clearCanvas} type="button">지우기</button>
+      </div>
+      <canvas
+        className="stampCanvas"
+        height={260}
+        onPointerDown={startDraw}
+        onPointerLeave={endDraw}
+        onPointerMove={draw}
+        onPointerUp={endDraw}
+        ref={canvasRef}
+        width={260}
+      />
+      <div className="stampPreview">
+        <span>미리보기</span>
+        {previewDataUrl ? <img src={previewDataUrl} alt="기본 도장 미리보기" /> : <strong>STAMP</strong>}
+      </div>
+      {message && <p className={message.includes("저장") ? "statusText" : "errorText"}>{message}</p>}
+      <button className="primaryButton" onClick={saveDefaultStamp} type="button">저장</button>
+    </section>
+  );
+}
+
+function BoothNamesPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const booth of me.booths || []) next[booth.id] = booth.name;
+    setNames(next);
+  }, [me.booths]);
+
+  async function saveBoothName(boothId: string) {
+    setMessage("");
+    try {
+      await apiJson("/api/admin/booths", {
+        method: "PATCH",
+        body: JSON.stringify({ boothId, name: names[boothId] || "" })
+      });
+      await refresh();
+      setMessage("부스 이름 저장");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "저장 실패");
+    }
+  }
+
+  return (
+    <section className="panel widePanel">
+      <div className="sectionHeader">
+        <div>
+          <h2>부스명</h2>
+          <p>현장 이름으로 수정.</p>
+        </div>
+      </div>
+      {message && <p className={message.includes("저장") ? "statusText" : "errorText"}>{message}</p>}
+      <div className="boothNameGrid">
+        {(me.booths || []).map((booth) => (
+          <div className="boothNameRow" key={booth.id}>
+            <div>
+              <strong>{booth.id}</strong>
+              <span>{booth.clubName}</span>
+            </div>
+            <input value={names[booth.id] || ""} onChange={(event) => setNames((current) => ({ ...current, [booth.id]: event.target.value }))} maxLength={28} />
+            <button className="secondaryButton" onClick={() => saveBoothName(booth.id)} type="button">저장</button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AccountAdminPanel() {
+  const [accounts, setAccounts] = useState<AdminAccountRow[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+
+  const load = useCallback(async () => {
+    const data = await apiJson<{ accounts: AdminAccountRow[] }>("/api/admin/accounts");
+    setAccounts(data.accounts);
+    setSelectedId((current) => current || data.accounts.find((account) => account.role !== "participant")?.id || data.accounts[0]?.id || "");
+  }, []);
+
+  useEffect(() => {
+    load().catch((err) => setMessage(err instanceof Error ? err.message : "계정 로드 실패"));
+  }, [load]);
+
+  async function resetPassword() {
+    setMessage("");
+    try {
+      await apiJson("/api/admin/accounts", {
+        method: "PATCH",
+        body: JSON.stringify({ accountId: selectedId, password })
+      });
+      setPassword("");
+      setMessage("비밀번호 변경");
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "변경 실패");
+    }
+  }
+
+  return (
+    <section className="panel widePanel">
+      <div className="sectionHeader">
+        <div>
+          <h2>계정</h2>
+          <p>아이디 확인, 비번 변경.</p>
+        </div>
+      </div>
+      <div className="accountTools">
+        <label>
+          계정
+          <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+            {accounts.map((account) => (
+              <option value={account.id} key={account.id}>
+                {account.loginId} · {roleLabel(account.role)} · {account.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          새 비번
+          <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="new-password" />
+        </label>
+        <button className="primaryButton" disabled={!selectedId || password.length < 8} onClick={resetPassword} type="button">변경</button>
+      </div>
+      {message && <p className={message.includes("변경") ? "statusText" : "errorText"}>{message}</p>}
+      <div className="tableWrap compactTable">
+        <table>
+          <thead>
+            <tr>
+              <th>아이디</th>
+              <th>이름</th>
+              <th>역할</th>
+              <th>담당</th>
+              <th>최근 로그인</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accounts.map((account) => (
+              <tr key={account.id}>
+                <td>{account.loginId}</td>
+                <td>{account.displayName}</td>
+                <td>{roleLabel(account.role)}</td>
+                <td>{account.targetName}</td>
+                <td>{formatTime(account.lastLoginAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
+  return (
+    <div className="gridTwo adminGrid">
+      <section className="panel widePanel">
+        <div className="sectionHeader">
+          <div>
+            <h2>총괄</h2>
+            <p>서버 기록 기준.</p>
+          </div>
+        </div>
+        <div className="metricGrid">
+          <div><strong>{me.adminSummary?.participantCount || 0}</strong><span>참가자</span></div>
+          <div><strong>{me.adminSummary?.stampCount || 0}</strong><span>스탬프</span></div>
+          <div><strong>{me.adminSummary?.couponCount || 0}</strong><span>쿠폰</span></div>
+          <div><strong>{me.adminSummary?.redeemedCouponCount || 0}</strong><span>사용 완료</span></div>
+          <div><strong>{me.adminSummary?.tempPassCount || 0}</strong><span>임시 QR</span></div>
+          <div><strong>{me.adminSummary?.redeemedTempPassCount || 0}</strong><span>임시 지급</span></div>
+        </div>
+      </section>
+      <DefaultStampPanel me={me} refresh={refresh} />
+      <AccountAdminPanel />
+      <BoothNamesPanel me={me} refresh={refresh} />
+    </div>
   );
 }
 
@@ -1489,24 +1949,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
         </div>
       )}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "codes" && <CodesPanel />}
-      {!(role === "participant" && me.account.displayNameRequired) && tab === "admin" && (
-        <section className="panel">
-          <div className="sectionHeader">
-            <div>
-              <h2>총괄</h2>
-              <p>서버 기록 기준.</p>
-            </div>
-          </div>
-          <div className="metricGrid">
-            <div><strong>{me.adminSummary?.participantCount || 0}</strong><span>참가자</span></div>
-            <div><strong>{me.adminSummary?.stampCount || 0}</strong><span>스탬프</span></div>
-            <div><strong>{me.adminSummary?.couponCount || 0}</strong><span>쿠폰</span></div>
-            <div><strong>{me.adminSummary?.redeemedCouponCount || 0}</strong><span>사용 완료</span></div>
-            <div><strong>{me.adminSummary?.tempPassCount || 0}</strong><span>임시 QR</span></div>
-            <div><strong>{me.adminSummary?.redeemedTempPassCount || 0}</strong><span>임시 지급</span></div>
-          </div>
-        </section>
-      )}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "admin" && <AdminPanel me={me} refresh={refresh} />}
     </main>
   );
 }

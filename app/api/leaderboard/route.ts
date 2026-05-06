@@ -11,7 +11,7 @@ function resolveStampImage(stampImageDataUrl: string, db: Awaited<ReturnType<typ
   if (!stampImageDataUrl.startsWith("booth:")) return stampImageDataUrl;
   const boothId = stampImageDataUrl.split(":")[1];
   const booth = db.booths.find((item) => item.id === boothId);
-  return booth?.stampImageDataUrl || defaultStampDataUrl(booth?.name || "STAMP");
+  return booth?.stampImageDataUrl || db.meta.defaultStampImageDataUrl || defaultStampDataUrl(booth?.name || "STAMP");
 }
 
 function speedrunRow(params: {

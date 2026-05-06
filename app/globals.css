@@ -341,6 +341,17 @@ textarea {
   background: #e5e7eb;
 }
 
+.dangerButton {
+  background: var(--danger-bg);
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 850;
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
 .appShell {
   margin: 0 auto;
   max-width: 1160px;
@@ -546,6 +557,10 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.82fr);
   gap: 16px;
+}
+
+.adminGrid {
+  align-items: start;
 }
 
 .panel {
@@ -1087,6 +1102,45 @@ th {
   font-weight: 800;
 }
 
+.accountTools {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.7fr) auto;
+  margin-bottom: 14px;
+}
+
+.compactTable table {
+  min-width: 680px;
+}
+
+.boothNameGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.boothNameRow {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(170px, 0.7fr) minmax(220px, 1fr) auto;
+  padding: 10px;
+}
+
+.boothNameRow strong {
+  display: block;
+  font-size: 13px;
+}
+
+.boothNameRow span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .tempPassPanel {
   display: grid;
   gap: 16px;
@@ -1096,7 +1150,7 @@ th {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(120px, 0.6fr) minmax(220px, 1.4fr) minmax(150px, 0.8fr) auto auto;
+  grid-template-columns: minmax(120px, 0.6fr) minmax(220px, 1.4fr) minmax(150px, 0.8fr) auto auto auto;
 }
 
 .tempNameInput {
@@ -1144,8 +1198,23 @@ th {
   gap: 8px;
 }
 
+.checkLine {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.checkLine input {
+  min-height: auto;
+  width: 17px;
+}
+
 .tempPassCard strong {
   font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tempPassCard img,
@@ -1285,6 +1354,11 @@ th {
 
   .tempControls {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .accountTools,
+  .boothNameRow {
+    grid-template-columns: 1fr;
   }
 
   .tempNameInput {

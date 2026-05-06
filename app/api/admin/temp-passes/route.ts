@@ -107,3 +107,43 @@ export async function POST(request: NextRequest) {
     return jsonError(error);
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    assertSameOrigin(request);
+    assertContentLength(request, 2048);
+    const current = await requireRole(request, ["superAdmin"]);
+    rateLimit(`temp-pass-delete:${current.account.id}`, 20, 10 * 60 * 1000);
+    const { ip, userAgent } = clientFingerprint(request.headers);
+    const body = (await request.json()) as { passId?: string; confirmLabel?: string };
+
+    await updateDb(async (db) => {
+      const pass = db.tempPasses.find((item) => item.id === body.passId);
+      if (!pass) throw new HttpError(404, "임시 QR을 찾을 수 없습니다.");
+      if ((body.confirmLabel || "").trim() !== pass.label) {
+        throw new HttpError(400, `${pass.label}을 정확히 입력해야 삭제됩니다.`);
+      }
+      db.tempPasses = db.tempPasses.filter((item) => item.id !== pass.id);
+      const now = new Date().toISOString();
+      db.auditLogs.push({
+        id: randomId("audit"),
+        actorAccountId: current.account.id,
+        action: "tempPass.delete",
+        targetId: pass.id,
+        createdAt: now,
+        ipHash: await hashFingerprint(ip),
+        userAgentHash: await hashFingerprint(userAgent),
+        metadata: {
+          label: pass.label,
+          status: pass.status,
+          stampCount: pass.stamps.length
+        }
+      });
+    });
+
+    const db = await readDb();
+    return jsonOk({ ok: true, passes: await listTempPasses(db.tempPasses) });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
