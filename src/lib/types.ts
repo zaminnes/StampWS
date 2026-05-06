@@ -9,6 +9,8 @@ export type Account = {
   passwordHash: string;
   role: Role;
   displayName: string;
+  studentCode?: string;
+  participantCacheHash?: string;
   boothId?: string;
   rewardId?: RewardId;
   selectedRewardId?: RewardId;

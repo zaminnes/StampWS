@@ -7,6 +7,7 @@ export function accountView(account: Account) {
     loginId: account.loginId,
     role: account.role,
     displayName: account.displayName,
+    studentCode: account.studentCode,
     boothId: account.boothId,
     rewardId: account.rewardId,
     selectedRewardId: account.selectedRewardId,

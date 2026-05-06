@@ -37,7 +37,11 @@ type LeaderboardRow = {
   bio: string;
   avatarStampImageDataUrl?: string;
   stampCount: number;
+  firstStampAt: string;
   completedSevenAt?: string;
+  durationMs: number;
+  behindFirstMs: number;
+  behindSecondMs: number;
 };
 
 type TempPassView = {
@@ -87,6 +91,7 @@ type MePayload = {
     loginId: string;
     role: Role;
     displayName: string;
+    studentCode?: string;
     boothId?: string;
     rewardId?: Reward["id"];
     selectedRewardId?: Reward["id"];
@@ -138,7 +143,7 @@ type MePayload = {
   };
 };
 
-type AuthMode = "login" | "register" | "adminJoin";
+type AuthMode = "participant" | "adminLogin" | "adminJoin";
 type AppTab = "home" | "profile" | "leaderboard" | "boothScan" | "stampStudio" | "rewardScan" | "codes" | "admin" | "tempPasses";
 
 async function apiJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -163,6 +168,16 @@ function formatTime(value?: string) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function formatDuration(ms?: number) {
+  if (typeof ms !== "number" || !Number.isFinite(ms)) return "-";
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function rewardLabel(reward?: Reward) {
@@ -439,7 +454,7 @@ function Scanner({ label, onScan }: { label: string; onScan: (token: string) => 
 }
 
 function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
-  const [mode, setMode] = useState<AuthMode>("login");
+  const [mode, setMode] = useState<AuthMode>("participant");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -447,12 +462,52 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    const raw = window.localStorage.getItem("wshsParticipantCache");
+    if (!raw) return;
+    let cancelled = false;
+    try {
+      const cached = JSON.parse(raw) as { studentCode?: string; cacheKey?: string };
+      if (!cached.studentCode || !cached.cacheKey) return;
+      apiJson<{ ok: true; participantCache?: { studentCode: string; cacheKey: string } }>("/api/auth/participant", {
+        method: "POST",
+        body: JSON.stringify(cached)
+      })
+        .then(async (data) => {
+          if (cancelled) return;
+          if (data.participantCache) {
+            window.localStorage.setItem("wshsParticipantCache", JSON.stringify(data.participantCache));
+          }
+          await onDone();
+        })
+        .catch(() => {
+          window.localStorage.removeItem("wshsParticipantCache");
+        });
+    } catch {
+      window.localStorage.removeItem("wshsParticipantCache");
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [onDone]);
+
   async function submit() {
     setBusy(true);
     setError("");
     try {
-      const endpoint =
-        mode === "login" ? "/api/auth/login" : mode === "register" ? "/api/auth/register" : "/api/admin/join";
+      if (mode === "participant") {
+        const data = await apiJson<{ ok: true; participantCache?: { studentCode: string; cacheKey: string } }>("/api/auth/participant", {
+          method: "POST",
+          body: JSON.stringify({ studentCode: loginId, displayName })
+        });
+        if (data.participantCache) {
+          window.localStorage.setItem("wshsParticipantCache", JSON.stringify(data.participantCache));
+        }
+        await onDone();
+        return;
+      }
+
+      const endpoint = mode === "adminLogin" ? "/api/auth/login" : "/api/admin/join";
       await apiJson(endpoint, {
         method: "POST",
         body: JSON.stringify({ loginId, password, displayName, inviteCode })
@@ -474,22 +529,30 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
           <p>스탬프 7개부터 쿠폰.</p>
         </div>
         <div className="segmented">
-          <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">로그인</button>
-          <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">참가자 가입</button>
+          <button className={mode === "participant" ? "active" : ""} onClick={() => setMode("participant")} type="button">참가자</button>
+          <button className={mode === "adminLogin" ? "active" : ""} onClick={() => setMode("adminLogin")} type="button">관리자 로그인</button>
           <button className={mode === "adminJoin" ? "active" : ""} onClick={() => setMode("adminJoin")} type="button">관리자 가입</button>
         </div>
         <label>
-          아이디
-          <input value={loginId} onChange={(event) => setLoginId(event.target.value)} autoComplete="username" />
+          {mode === "participant" ? "학번" : "아이디"}
+          <input
+            value={loginId}
+            onChange={(event) => setLoginId(event.target.value)}
+            autoComplete="username"
+            inputMode={mode === "participant" ? "numeric" : "text"}
+            placeholder={mode === "participant" ? "학년반번호" : ""}
+          />
         </label>
-        <label>
-          비밀번호
-          <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} />
-        </label>
-        {mode !== "login" && (
+        {mode !== "participant" && (
           <label>
-            표시 이름
-            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={12} />
+            비밀번호
+            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === "adminLogin" ? "current-password" : "new-password"} />
+          </label>
+        )}
+        {mode !== "adminLogin" && (
+          <label>
+            {mode === "participant" ? "이름" : "표시 이름"}
+            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={12} placeholder={mode === "participant" ? "처음만 입력" : ""} />
           </label>
         )}
         {mode === "adminJoin" && (
@@ -500,7 +563,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
         )}
         {error && <p className="errorText">{error}</p>}
         <button className="primaryButton" disabled={busy} onClick={submit} type="button">
-          {busy ? "처리중" : mode === "login" ? "로그인" : "가입"}
+          {busy ? "처리중" : mode === "participant" ? "입장" : mode === "adminLogin" ? "로그인" : "가입"}
         </button>
       </section>
       <section className="quickPanel">
@@ -1094,12 +1157,16 @@ function Leaderboard() {
             <div className="miniAvatar">{row.avatarStampImageDataUrl ? <img src={row.avatarStampImageDataUrl} alt="" /> : <span>{row.displayName.slice(0, 2)}</span>}</div>
             <div>
               <h3>{row.displayName}</h3>
-              <p>{row.bio || "참가자"}</p>
+              <p>{row.bio || `완료 ${formatTime(row.completedSevenAt)}`}</p>
+              <div className="speedMeta">
+                {row.rank === 1 ? <span>기준 기록</span> : <span>1위 +{formatDuration(row.behindFirstMs)}</span>}
+                {row.rank <= 2 ? <span>2위 기준</span> : <span>2위 +{formatDuration(row.behindSecondMs)}</span>}
+              </div>
             </div>
-            <div className="scoreBox">{row.stampCount}</div>
+            <div className="scoreBox">{formatDuration(row.durationMs)}</div>
           </div>
         ))}
-        {rows.length === 0 && <p className="emptyText">기록 없음</p>}
+        {rows.length === 0 && <p className="emptyText">완주 기록 없음</p>}
       </div>
     </section>
   );
@@ -1154,6 +1221,9 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
   }, [role]);
 
   async function logout() {
+    if (me.account?.role === "participant") {
+      window.localStorage.removeItem("wshsParticipantCache");
+    }
     await apiJson("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
     setMe({ account: null });
     setTab("home");
