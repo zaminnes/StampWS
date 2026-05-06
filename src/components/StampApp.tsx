@@ -510,7 +510,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
               <p className="eyebrow">운영</p>
               <h2>오늘 화면</h2>
             </div>
-            <span className="liveBadge">준비</span>
+            <span className="liveBadge">James 제작</span>
           </div>
           <div className="flowList">
             <div className="flowItem primaryFlow">
