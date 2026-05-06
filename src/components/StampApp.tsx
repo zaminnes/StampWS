@@ -87,6 +87,7 @@ type BluetoothServer = {
 };
 
 type BluetoothDevice = {
+  addEventListener?: (type: "gattserverdisconnected", listener: () => void) => void;
   gatt?: {
     connect: () => Promise<BluetoothServer>;
   };
@@ -336,7 +337,11 @@ function canvasToPrinterBitmap(canvas: HTMLCanvasElement) {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const index = (y * width + x) * 4;
-      const gray = imageData.data[index] * 0.299 + imageData.data[index + 1] * 0.587 + imageData.data[index + 2] * 0.114;
+      const alpha = imageData.data[index + 3] / 255;
+      const red = Math.round(imageData.data[index] * alpha + 255 * (1 - alpha));
+      const green = Math.round(imageData.data[index + 1] * alpha + 255 * (1 - alpha));
+      const blue = Math.round(imageData.data[index + 2] * alpha + 255 * (1 - alpha));
+      const gray = Math.round(red * 0.299 + green * 0.587 + blue * 0.114);
       if (gray < 128) {
         bitmap[y * bytesPerLine + Math.floor(x / 8)] |= 1 << (7 - (x % 8));
       }
@@ -361,14 +366,40 @@ function canvasToPrinterBitmap(canvas: HTMLCanvasElement) {
 
 async function writePrinter(characteristic: BluetoothWriteCharacteristic, data: Uint8Array) {
   if (characteristic.writeValueWithoutResponse) {
-    await characteristic.writeValueWithoutResponse(data);
-    return;
+    try {
+      await characteristic.writeValueWithoutResponse(data);
+      return;
+    } catch {
+      if (!characteristic.writeValue) throw new Error("프린터 전송에 실패했습니다.");
+    }
   }
   if (characteristic.writeValue) {
     await characteristic.writeValue(data);
     return;
   }
   throw new Error("프린터 쓰기 기능을 찾지 못했습니다.");
+}
+
+async function sendPrinterData(characteristic: BluetoothWriteCharacteristic, data: Uint8Array, onProgress: (progress: number) => void, progressBase: number, progressScale: number) {
+  const chunkSize = 100;
+  let sentBytes = 0;
+  for (let offset = 0; offset < data.length; offset += chunkSize) {
+    const chunk = data.slice(offset, Math.min(offset + chunkSize, data.length));
+    let retries = 0;
+    while (retries < 10) {
+      try {
+        await writePrinter(characteristic, chunk);
+        sentBytes += chunk.length;
+        break;
+      } catch {
+        retries += 1;
+        if (retries >= 10) throw new Error(`BLE 전송 실패: ${offset}`);
+        await delay(20 * retries);
+      }
+    }
+    onProgress(progressBase + Math.round((sentBytes / data.length) * progressScale));
+    await delay(8);
+  }
 }
 
 async function connectNemonicPrinter() {
@@ -381,9 +412,10 @@ async function connectNemonicPrinter() {
   }
 
   const device = await bluetooth.requestDevice({
-    acceptAllDevices: true,
+    filters: [{ namePrefix: "nemonic" }, { namePrefix: "Nemonic" }],
     optionalServices: PRINTER_SERVICES.map((item) => item.service)
   });
+  device.addEventListener?.("gattserverdisconnected", () => undefined);
   const server = await device.gatt?.connect();
   if (!server) throw new Error("프린터 연결에 실패했습니다.");
 
@@ -406,17 +438,20 @@ async function printTempPasses(passes: TempPassView[], printerType: PrinterType,
   onProgress(5);
   const characteristic = await connectNemonicPrinter();
   onProgress(12);
+  await writePrinter(characteristic, new Uint8Array([0x1b, 0x40]));
+  await delay(200);
 
   for (const [index, pass] of printable.entries()) {
     const canvas = await renderTempPassCanvas(pass, printerType);
     const packet = canvasToPrinterBitmap(canvas);
-    for (let offset = 0; offset < packet.length; offset += 100) {
-      await writePrinter(characteristic, packet.slice(offset, Math.min(offset + 100, packet.length)));
-      await delay(10);
-    }
-    await delay(1000);
-    await writePrinter(characteristic, new Uint8Array([0x1b, 0x69]));
+    const progressBase = 12 + Math.round((index / printable.length) * 80);
+    const progressScale = Math.max(1, Math.round(80 / printable.length));
+    await sendPrinterData(characteristic, packet, onProgress, progressBase, progressScale);
     await delay(500);
+    await writePrinter(characteristic, new Uint8Array([0x1b, 0x50]));
+    await delay(Math.max(2000, canvas.height * 10));
+    await writePrinter(characteristic, new Uint8Array([0x1b, 0x69]));
+    await delay(1000);
     onProgress(12 + Math.round(((index + 1) / printable.length) * 88));
   }
 }
