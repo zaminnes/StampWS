@@ -85,20 +85,22 @@ type BluetoothServer = {
 };
 
 type BluetoothDevice = {
-  addEventListener?: (type: "gattserverdisconnected", listener: () => void) => void;
-  gatt?: {
+  addEventListener: (type: "gattserverdisconnected", listener: () => void) => void;
+  gatt: {
     connect: () => Promise<BluetoothServer>;
   };
 };
 
-type BluetoothNavigator = Navigator & {
+declare global {
+  interface Navigator {
   bluetooth?: {
     requestDevice: (options: {
       filters: Array<{ namePrefix: string }>;
       optionalServices: string[];
     }) => Promise<BluetoothDevice>;
   };
-};
+  }
+}
 
 type MePayload = {
   account: null | {
@@ -258,18 +260,19 @@ function roleLabel(role?: Role) {
 
 const PRINTER_WIDTH = 576;
 
-const PRINTER_SERVICES = [
-  { svc: "00005000-d102-11e1-9b23-74f07d000000", write: "00005001-d102-11e1-9b23-74f07d000000", name: "NEMONIC" },
-  { svc: "3b790000-923e-4f69-b794-74f07d000000", write: "3b790002-923e-4f69-b794-74f07d000000", name: "MIP201" },
-  { svc: "49535343-fe78-4ae5-8fa9-9fafd205e455", write: "49535343-8841-43f4-a8d4-ecbe34729bb3", name: "MIP301" }
-];
+let printerConnected = false;
+const writeCharRef: { current: any } = { current: null };
+let printProgressSetter = (_progress: number) => {};
 
-let nemonicPrinterConnected = false;
-let nemonicWriteCharacteristic: BluetoothWriteCharacteristic | null = null;
-
-function delay(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+function setPrinterConnected(value: boolean) {
+  printerConnected = value;
 }
+
+function setPrintProgress(value: number) {
+  printProgressSetter(value);
+}
+
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 function loadCanvasImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -323,149 +326,136 @@ async function renderTempPassCanvas(pass: TempPassView) {
   return canvas;
 }
 
-function toBW(context: CanvasRenderingContext2D, width: number, height: number) {
-  const imageData = context.getImageData(0, 0, width, height);
-  const pixels = imageData.data;
+const toBW = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const px = imageData.data;
   const bw: number[][] = [];
-  for (let y = 0; y < height; y += 1) {
+  for (let y = 0; y < h; y++) {
     const row: number[] = [];
-    for (let x = 0; x < width; x += 1) {
-      const index = (y * width + x) * 4;
-      const r = pixels[index];
-      const g = pixels[index + 1];
-      const b = pixels[index + 2];
-      const a = pixels[index + 3];
-      let rr = r;
-      let gg = g;
-      let bb = b;
-      if (a < 255) {
-        const alpha = a / 255;
-        rr = Math.round(r * alpha + 255 * (1 - alpha));
-        gg = Math.round(g * alpha + 255 * (1 - alpha));
-        bb = Math.round(b * alpha + 255 * (1 - alpha));
-      }
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const r = px[i], g = px[i + 1], b = px[i + 2], a = px[i + 3];
+      let rr = r, gg = g, bb = b;
+      if (a < 255) { const alpha = a / 255; rr = Math.round(r * alpha + 255 * (1 - alpha)); gg = Math.round(g * alpha + 255 * (1 - alpha)); bb = Math.round(b * alpha + 255 * (1 - alpha)); }
       const gray = Math.round(rr * 0.299 + gg * 0.587 + bb * 0.114);
       row.push(gray < 128 ? 1 : 0);
     }
     bw.push(row);
   }
   return bw;
-}
+};
 
-async function sendCmd(characteristic: BluetoothWriteCharacteristic, bytes: number[]) {
+const sendCmd = async (bytes: number[]) => {
   const data = new Uint8Array(bytes);
-  try {
-    await characteristic.writeValueWithoutResponse!(data);
-  } catch {
-    await characteristic.writeValue?.(data);
-  }
-}
+  try { await writeCharRef.current.writeValueWithoutResponse(data); } catch (e) { await writeCharRef.current.writeValue(data); }
+};
 
-async function sendDataMTU(characteristic: BluetoothWriteCharacteristic, data: Uint8Array, onProgress: (progress: number) => void, progressBase = 0, progressScale = 90) {
+const sendDataMTU = async (data: Uint8Array, progressBase = 0, progressScale = 90) => {
   const CHUNK_SIZE = 100;
   let sentBytes = 0;
-  for (let index = 0; index < data.length; index += CHUNK_SIZE) {
-    const chunk = data.slice(index, Math.min(index + CHUNK_SIZE, data.length));
+  for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+    const chunk = data.slice(i, Math.min(i + CHUNK_SIZE, data.length));
     let retries = 0;
     while (retries < 10) {
-      try {
-        await characteristic.writeValueWithoutResponse!(chunk);
-        sentBytes += chunk.length;
-        break;
-      } catch {
-        retries += 1;
-        if (retries >= 10) throw new Error(`BLE 전송 실패 at ${index}`);
-        await delay(20 * retries);
-      }
+      try { await writeCharRef.current.writeValueWithoutResponse(chunk); sentBytes += chunk.length; break; }
+      catch (e) { retries++; if (retries >= 10) throw new Error(`BLE 전송 실패 at ${i}`); await delay(20 * retries); }
     }
-    onProgress(progressBase + Math.round((sentBytes / data.length) * progressScale));
+    setPrintProgress(progressBase + Math.round((sentBytes / data.length) * progressScale));
     await delay(8);
   }
-}
+};
 
-async function sendToPrinter(characteristic: BluetoothWriteCharacteristic, bwData: number[][], onProgress: (progress: number) => void, progressBase = 0, progressScale = 90) {
-  const height = bwData.length;
-  const width = bwData[0].length;
-  const bytesPerLine = Math.ceil(width / 8);
+const sendToPrinter = async (bwData: number[][], progressBase = 0, progressScale = 90) => {
+  const h = bwData.length;
+  const w = bwData[0].length;
+  const bytesPerLine = Math.ceil(w / 8);
 
-  const bitmap = new Uint8Array(bytesPerLine * height);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
+  const bitmap = new Uint8Array(bytesPerLine * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
       if (bwData[y][x] === 1) {
-        const byteIndex = y * bytesPerLine + Math.floor(x / 8);
-        const bitIndex = 7 - (x % 8);
-        bitmap[byteIndex] |= 1 << bitIndex;
+        const byteIdx = y * bytesPerLine + Math.floor(x / 8);
+        const bitIdx = 7 - (x % 8);
+        bitmap[byteIdx] |= (1 << bitIdx);
       }
     }
   }
 
-  const header = new Uint8Array([0x1d, 0x76, 0x30, 0x00, bytesPerLine & 0xff, (bytesPerLine >> 8) & 0xff, height & 0xff, (height >> 8) & 0xff]);
+  const header = new Uint8Array([0x1D, 0x76, 0x30, 0x00, bytesPerLine & 0xFF, (bytesPerLine >> 8) & 0xFF, h & 0xFF, (h >> 8) & 0xFF]);
   const packet = new Uint8Array(header.length + bitmap.length);
   packet.set(header, 0);
   packet.set(bitmap, header.length);
 
-  await sendDataMTU(characteristic, packet, onProgress, progressBase, progressScale);
+  await sendDataMTU(packet, progressBase, progressScale);
   await delay(500);
-  await sendCmd(characteristic, [0x1b, 0x50]);
-}
+  await sendCmd([0x1B, 0x50]);
+};
 
-async function connectNemonicPrinter() {
-  const bluetooth = (navigator as BluetoothNavigator).bluetooth;
-  if (!bluetooth) {
-    throw new Error("이 브라우저에서는 블루투스 프린터를 지원하지 않습니다.\n\nChrome, Edge 또는 Opera 브라우저를 사용해주세요.");
+const connectPrinter = async () => {
+  if (!navigator.bluetooth) {
+    alert("이 브라우저에서는 블루투스 프린터를 지원하지 않습니다.\n\nChrome, Edge 또는 Opera 브라우저를 사용해주세요.");
+    return false;
   }
-
   try {
-    const device = await bluetooth.requestDevice({
+    const device = await navigator.bluetooth.requestDevice({
       filters: [{ namePrefix: "nemonic" }],
-      optionalServices: PRINTER_SERVICES.map((item) => item.svc)
+      optionalServices: ["00005000-d102-11e1-9b23-74f07d000000", "3b790000-923e-4f69-b794-74f07d000000", "49535343-fe78-4ae5-8fa9-9fafd205e455"]
     });
-    device.addEventListener?.("gattserverdisconnected", () => {
-      nemonicPrinterConnected = false;
-      nemonicWriteCharacteristic = null;
+    device.addEventListener("gattserverdisconnected", () => {
+      setPrinterConnected(false);
+      writeCharRef.current = null;
     });
-    const server = await device.gatt?.connect();
-    if (!server) throw new Error("프린터 연결에 실패했습니다.");
-    for (const serviceInfo of PRINTER_SERVICES) {
+    const server = await device.gatt.connect();
+    const services = [
+      { svc: "00005000-d102-11e1-9b23-74f07d000000", write: "00005001-d102-11e1-9b23-74f07d000000", name: "NEMONIC" },
+      { svc: "3b790000-923e-4f69-b794-74f07d000000", write: "3b790002-923e-4f69-b794-74f07d000000", name: "MIP201" },
+      { svc: "49535343-fe78-4ae5-8fa9-9fafd205e455", write: "49535343-8841-43f4-a8d4-ecbe34729bb3", name: "MIP301" }
+    ];
+    for (const s of services) {
       try {
-        const service = await server.getPrimaryService(serviceInfo.svc);
-        nemonicWriteCharacteristic = await service.getCharacteristic(serviceInfo.write);
-        nemonicPrinterConnected = true;
-        return nemonicWriteCharacteristic;
-      } catch {
-      }
+        const sv = await server.getPrimaryService(s.svc);
+        writeCharRef.current = await sv.getCharacteristic(s.write);
+        setPrinterConnected(true);
+        return true;
+      } catch (e) { }
     }
     throw new Error("서비스 없음");
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "NotFoundError") {
-      throw new Error("프린터 선택이 취소되었습니다.");
+  } catch (error: any) {
+    if (error.name !== "NotFoundError") {
+      alert("프린터 연결 실패: " + error.message);
     }
-    throw error;
+    return false;
   }
-}
+};
 
 async function printTempPasses(passes: TempPassView[], onProgress: (progress: number) => void) {
   const printable = passes.filter((pass) => pass.status === "active" && pass.qrToken);
   if (printable.length === 0) throw new Error("인쇄할 임시 QR이 없습니다.");
 
-  const characteristic = nemonicPrinterConnected && nemonicWriteCharacteristic ? nemonicWriteCharacteristic : await connectNemonicPrinter();
-  onProgress(0);
-  await sendCmd(characteristic, [0x1b, 0x40]);
-  await delay(200);
+  printProgressSetter = onProgress;
+  if (!printerConnected && !(await connectPrinter())) throw new Error("프린터 연결 실패");
 
-  for (const [index, pass] of printable.entries()) {
-    const canvas = await renderTempPassCanvas(pass);
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("인쇄 캔버스를 읽지 못했습니다.");
-    const bwData = toBW(context, canvas.width, canvas.height);
-    const progressBase = Math.round((index / printable.length) * 90);
-    const progressScale = Math.max(1, Math.round(90 / printable.length));
-    await sendToPrinter(characteristic, bwData, onProgress, progressBase, progressScale);
-    await delay(Math.max(2000, canvas.height * 10));
-    await sendCmd(characteristic, [0x1b, 0x69]);
-    await delay(1000);
+  try {
+    await sendCmd([0x1B, 0x40]);
+    await delay(200);
+
+    for (const [index, pass] of printable.entries()) {
+      const canvas = await renderTempPassCanvas(pass);
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("인쇄 캔버스를 읽지 못했습니다.");
+      const bwData = toBW(context, canvas.width, canvas.height);
+      const progressBase = Math.round((index / printable.length) * 90);
+      const progressScale = Math.max(1, Math.round(90 / printable.length));
+      await sendToPrinter(bwData, progressBase, progressScale);
+      await delay(Math.max(2000, canvas.height * 10));
+      await sendCmd([0x1B, 0x69]);
+      await delay(1000);
+    }
+
+    setPrintProgress(100);
+  } finally {
+    printProgressSetter = () => {};
   }
-  onProgress(100);
 }
 
 function QrImage({ token, label }: { token: string; label: string }) {
