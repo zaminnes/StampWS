@@ -37,9 +37,10 @@ type LeaderboardRow = {
   bio: string;
   avatarStampImageDataUrl?: string;
   stampCount: number;
-  firstStampAt: string;
+  firstStampAt?: string;
   completedSevenAt?: string;
-  durationMs: number;
+  completed: boolean;
+  durationMs: number | null;
   behindFirstMs: number;
   behindSecondMs: number;
 };
@@ -92,6 +93,7 @@ type MePayload = {
     loginId: string;
     role: Role;
     displayName: string;
+    displayNameRequired?: boolean;
     studentCode?: string;
     boothId?: string;
     rewardId?: Reward["id"];
@@ -147,6 +149,21 @@ type MePayload = {
 type AuthMode = "participant" | "adminLogin" | "adminJoin";
 type AppTab = "home" | "profile" | "leaderboard" | "boothScan" | "stampStudio" | "rewardScan" | "codes" | "admin" | "tempPasses";
 
+type StampEffectState = {
+  id: number;
+  mode: "give" | "receive";
+  title: string;
+  detail: string;
+  imageDataUrl?: string;
+};
+
+const REWARD_KO: Record<Reward["id"], { clubName: string; name: string }> = {
+  chemistry: { clubName: "화학", name: "달고나" },
+  biology: { clubName: "생명", name: "콩가루차" },
+  quasar: { clubName: "퀘이사", name: "팝콘" },
+  alphago: { clubName: "알파고", name: "아이스티" }
+};
+
 async function apiJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
@@ -199,7 +216,14 @@ function formatDuration(ms?: number) {
 
 function rewardLabel(reward?: Reward) {
   if (!reward) return "-";
-  return `${reward.clubName} - ${reward.name}`;
+  const label = REWARD_KO[reward.id];
+  return label ? `${label.clubName} - ${label.name}` : `${reward.clubName} - ${reward.name}`;
+}
+
+function rewardNameById(rewardId?: Reward["id"]) {
+  if (!rewardId) return "-";
+  const label = REWARD_KO[rewardId];
+  return label ? `${label.clubName} - ${label.name}` : rewardId;
 }
 
 function roleLabel(role?: Role) {
@@ -272,7 +296,7 @@ async function renderTempPassCanvas(pass: TempPassView, printerType: PrinterType
   context.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
   drawCenteredText(context, "7개 완료 후 보상 부스 스캔", qrY + qrSize + 22, width, printerType === "mini" ? 18 : 22, 800);
-  drawCenteredText(context, `${pass.label} · 랭킹 포함`, qrY + qrSize + (printerType === "mini" ? 48 : 56), width, printerType === "mini" ? 14 : 16, 700);
+  drawCenteredText(context, `${pass.label} · 현장 임시권`, qrY + qrSize + (printerType === "mini" ? 48 : 56), width, printerType === "mini" ? 14 : 16, 700);
 
   return canvas;
 }
@@ -375,6 +399,24 @@ function QrImage({ token, label }: { token: string; label: string }) {
     <div className="qrBox" aria-label={label}>
       <img src={`/api/qr?value=${encodeURIComponent(publicQrValue(token))}`} alt={label} />
       <p>{label}</p>
+    </div>
+  );
+}
+
+function StampEffect({ effect }: { effect: StampEffectState }) {
+  return (
+    <div className={`stampEffect ${effect.mode}`} aria-live="polite" key={effect.id}>
+      <div className="burstRing" />
+      <div className="spark s1" />
+      <div className="spark s2" />
+      <div className="spark s3" />
+      <div className="effectStamp">
+        {effect.imageDataUrl ? <img src={effect.imageDataUrl} alt="" /> : <span>STAMP</span>}
+      </div>
+      <div className="effectText">
+        <strong>{effect.title}</strong>
+        <span>{effect.detail}</span>
+      </div>
     </div>
   );
 }
@@ -519,7 +561,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
       if (mode === "participant") {
         const data = await apiJson<{ ok: true; participantCache?: { studentCode: string; cacheKey: string } }>("/api/auth/participant", {
           method: "POST",
-          body: JSON.stringify({ studentCode: loginId, displayName })
+          body: JSON.stringify({ studentCode: loginId })
         });
         if (data.participantCache) {
           window.localStorage.setItem("wshsParticipantCache", JSON.stringify(data.participantCache));
@@ -566,16 +608,17 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
             placeholder={mode === "participant" ? "예: 10214" : ""}
           />
         </label>
+        {mode === "participant" && <p className="hintText">중학생은 현장에서 임시 QR을 받아주세요.</p>}
         {mode !== "participant" && (
           <label>
             비밀번호
             <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === "adminLogin" ? "current-password" : "new-password"} />
           </label>
         )}
-        {mode !== "adminLogin" && (
+        {mode === "adminJoin" && (
           <label>
-            {mode === "participant" ? "이름" : "표시 이름"}
-            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={12} placeholder={mode === "participant" ? "처음만 입력" : ""} />
+            표시 이름
+            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={12} />
           </label>
         )}
         {mode === "adminJoin" && (
@@ -626,20 +669,20 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
           </div>
           <div className="rewardRail">
             <div>
-              <img src="/rewards/dalgona.png" alt="Dalgona" />
-              <span>화학</span>
+              <img src="/rewards/dalgona.png" alt="화학 달고나" />
+              <span>화학 달고나</span>
             </div>
             <div>
-              <img src="/rewards/bean-tea.png" alt="Bean Powder Tea" />
-              <span>생명</span>
+              <img src="/rewards/bean-tea.png" alt="생명 콩가루차" />
+              <span>생명 콩가루차</span>
             </div>
             <div>
-              <img src="/rewards/popcorn.png" alt="Popcorn" />
-              <span>퀘이사</span>
+              <img src="/rewards/popcorn.png" alt="퀘이사 팝콘" />
+              <span>퀘이사 팝콘</span>
             </div>
             <div>
-              <img src="/rewards/iced-tea.png" alt="Iced Tea" />
-              <span>알파고</span>
+              <img src="/rewards/iced-tea.png" alt="알파고 아이스티" />
+              <span>알파고 아이스티</span>
             </div>
           </div>
         </section>
@@ -767,12 +810,15 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
           </div>
           <span className="countText">{stamps.length}개</span>
         </div>
-        <div className="stampGrid">
+        <div className="stampList">
           {stamps.map((stamp) => (
-            <div className="stampTile" key={stamp.id}>
-              <img src={stamp.stampImageDataUrl} alt={stamp.boothName} />
-              <strong>{stamp.boothName}</strong>
-              <span>{formatTime(stamp.createdAt)}</span>
+            <div className="stampRecord" key={stamp.id}>
+              <img src={stamp.stampImageDataUrl} alt={`${stamp.boothName} 로고`} />
+              <div>
+                <strong>{stamp.boothName}</strong>
+                <span>{formatTime(stamp.createdAt)}</span>
+              </div>
+              <span className="pill done">완료</span>
             </div>
           ))}
           {stamps.length === 0 && <p className="emptyText">기록 없음</p>}
@@ -830,7 +876,7 @@ function ProfileEditor({ me, refresh }: { me: MePayload; refresh: () => Promise<
           <input value={bio} onChange={(event) => setBio(event.target.value)} maxLength={80} />
         </label>
         <label>
-          대표 스탬프
+          좋아하는 스탬프
           <select value={avatarStampId} onChange={(event) => setAvatarStampId(event.target.value)}>
             <option value="">기본</option>
             {(me.stamps || []).map((stamp) => (
@@ -866,12 +912,55 @@ function ProfileEditor({ me, refresh }: { me: MePayload; refresh: () => Promise<
   );
 }
 
+function RequiredNamePanel({ refresh }: { refresh: () => Promise<void> }) {
+  const [displayName, setDisplayName] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function saveName() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await apiJson("/api/profile/update", {
+        method: "POST",
+        body: JSON.stringify({ displayName })
+      });
+      await refresh();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel requiredNamePanel">
+      <div className="sectionHeader">
+        <div>
+          <p className="eyebrow">처음 설정</p>
+          <h2>이름 입력</h2>
+          <p>랭킹과 쿠폰 확인에 표시됩니다.</p>
+        </div>
+      </div>
+      <label>
+        이름
+        <input autoFocus value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={12} placeholder="실명 입력" />
+      </label>
+      {message && <p className="errorText">{message}</p>}
+      <button className="primaryButton" disabled={busy || displayName.trim().length < 2} onClick={saveName} type="button">
+        저장
+      </button>
+    </section>
+  );
+}
+
 function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const [color, setColor] = useState("#ef4444");
   const [size, setSize] = useState(12);
   const [message, setMessage] = useState("");
+  const [previewDataUrl, setPreviewDataUrl] = useState("");
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -882,8 +971,13 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
     context.fillRect(0, 0, canvas.width, canvas.height);
     if (me.booth?.stampImageDataUrl) {
       const image = new Image();
-      image.onload = () => context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      image.onload = () => {
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        setPreviewDataUrl(canvas.toDataURL("image/png"));
+      };
       image.src = me.booth.stampImageDataUrl;
+    } else {
+      setPreviewDataUrl(canvas.toDataURL("image/png"));
     }
   }, [me.booth?.stampImageDataUrl]);
 
@@ -920,8 +1014,14 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
     context?.moveTo(start.x, start.y);
   }
 
+  function syncPreview() {
+    const canvas = canvasRef.current;
+    if (canvas) setPreviewDataUrl(canvas.toDataURL("image/png"));
+  }
+
   function endDraw() {
     drawingRef.current = false;
+    syncPreview();
   }
 
   function clearCanvas() {
@@ -930,6 +1030,7 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
     if (!canvas || !context) return;
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, canvas.width, canvas.height);
+    syncPreview();
   }
 
   async function saveStamp() {
@@ -977,6 +1078,10 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
         ref={canvasRef}
         width={260}
       />
+      <div className="stampPreview">
+        <span>미리보기</span>
+        {previewDataUrl ? <img src={previewDataUrl} alt="도장 미리보기" /> : <strong>STAMP</strong>}
+      </div>
       {message && <p className={message.includes("저장됨") ? "statusText" : "errorText"}>{message}</p>}
       <button className="primaryButton" onClick={saveStamp} type="button">저장</button>
     </section>
@@ -1112,8 +1217,8 @@ function TempPassPanel() {
           <input min={1} max={40} type="number" value={count} onChange={(event) => setCount(Number(event.target.value))} />
         </label>
         <label className="tempNameInput">
-          이름
-          <textarea value={displayNames} onChange={(event) => setDisplayNames(event.target.value)} placeholder="한 줄에 한 명" rows={3} />
+          메모
+          <textarea value={displayNames} onChange={(event) => setDisplayNames(event.target.value)} placeholder="선택 입력" rows={3} />
         </label>
         <label>
           프린터
@@ -1133,7 +1238,7 @@ function TempPassPanel() {
       <div className="summaryRows tempSummary">
         <div><span>인쇄 대상</span><strong>{printTargets.length}개</strong></div>
         <div><span>사용 가능</span><strong>{passes.filter((pass) => pass.status === "active").length}개</strong></div>
-        <div><span>랭킹</span><strong>포함</strong></div>
+        <div><span>랭킹</span><strong>제외</strong></div>
       </div>
 
       {message && <p className={message.includes("완료") || message.includes("생성") ? "statusText" : "errorText"}>{message}</p>}
@@ -1152,6 +1257,7 @@ function TempPassPanel() {
               <div className="usedQr">완료</div>
             )}
             <p>스탬프 {pass.stampCount}/7</p>
+            {pass.redeemedRewardId && <p>{rewardNameById(pass.redeemedRewardId)}</p>}
             <small>{pass.redeemedAt ? formatTime(pass.redeemedAt) : formatTime(pass.createdAt)}</small>
           </div>
         ))}
@@ -1176,7 +1282,7 @@ function Leaderboard() {
       <div className="sectionHeader">
         <div>
           <h2>랭킹</h2>
-          <p>동점은 먼저 7개.</p>
+          <p>진행 중도 표시.</p>
         </div>
       </div>
       {error && <p className="errorText">{error}</p>}
@@ -1187,16 +1293,23 @@ function Leaderboard() {
             <div className="miniAvatar">{row.avatarStampImageDataUrl ? <img src={row.avatarStampImageDataUrl} alt="" /> : <span>{row.displayName.slice(0, 2)}</span>}</div>
             <div>
               <h3>{row.displayName}</h3>
-              <p>{row.bio || `완료 ${formatTime(row.completedSevenAt)}`}</p>
+              <p>{row.bio || (row.completed ? `완료 ${formatTime(row.completedSevenAt)}` : `${row.stampCount}/7 진행`)}</p>
               <div className="speedMeta">
-                {row.rank === 1 ? <span>기준 기록</span> : <span>1위 +{formatDuration(row.behindFirstMs)}</span>}
-                {row.rank <= 2 ? <span>2위 기준</span> : <span>2위 +{formatDuration(row.behindSecondMs)}</span>}
+                <span>스탬프 {row.stampCount}/7</span>
+                {row.completed ? (
+                  <>
+                    {row.rank === 1 ? <span>기준 기록</span> : <span>1위 +{formatDuration(row.behindFirstMs)}</span>}
+                    {row.rank <= 2 ? <span>2위 기준</span> : <span>2위 +{formatDuration(row.behindSecondMs)}</span>}
+                  </>
+                ) : (
+                  <span>완주 전</span>
+                )}
               </div>
             </div>
-            <div className="scoreBox">{formatDuration(row.durationMs)}</div>
+            <div className={`scoreBox ${row.completed ? "" : "pending"}`}>{row.completed ? formatDuration(row.durationMs || 0) : `${row.stampCount}/7`}</div>
           </div>
         ))}
-        {rows.length === 0 && <p className="emptyText">완주 기록 없음</p>}
+        {rows.length === 0 && <p className="emptyText">기록 없음</p>}
       </div>
     </section>
   );
@@ -1207,19 +1320,49 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<AppTab>(initialTab);
   const [toast, setToast] = useState("");
+  const [stampEffect, setStampEffect] = useState<StampEffectState | null>(null);
+  const previousStampCountRef = useRef<number | null>(null);
+
+  const showStampEffect = useCallback((effect: Omit<StampEffectState, "id">) => {
+    const next = { ...effect, id: Date.now() };
+    setStampEffect(next);
+    window.setTimeout(() => {
+      setStampEffect((current) => (current?.id === next.id ? null : current));
+    }, 1800);
+  }, []);
 
   const refresh = useCallback(async () => {
     const data = await apiJson<MePayload>("/api/me", { method: "GET" });
+    const previousStampCount = previousStampCountRef.current;
+    const nextStampCount = data.stats?.stampCount ?? 0;
+    if (data.account?.role === "participant" && previousStampCount !== null && nextStampCount > previousStampCount) {
+      const latestStamp = data.stamps?.[0];
+      showStampEffect({
+        mode: "receive",
+        title: "스탬프 받음",
+        detail: latestStamp ? `${latestStamp.boothName} · ${nextStampCount}/7` : `${nextStampCount}/7`,
+        imageDataUrl: latestStamp?.stampImageDataUrl
+      });
+    }
+    previousStampCountRef.current = data.account?.role === "participant" ? nextStampCount : null;
     setMe(data);
     if (data.account?.role === "boothAdmin") setTab((current) => (current === "home" ? "boothScan" : current));
     if (data.account?.role === "rewardAdmin") setTab((current) => (current === "home" ? "rewardScan" : current));
     if (data.account?.role === "superAdmin") setTab((current) => (current === "home" ? "admin" : current));
     setLoading(false);
-  }, []);
+  }, [showStampEffect]);
 
   useEffect(() => {
     refresh().catch(() => setLoading(false));
   }, [refresh]);
+
+  useEffect(() => {
+    if (me.account?.role !== "participant" || me.account.displayNameRequired) return;
+    const timer = window.setInterval(() => {
+      refresh().catch(() => undefined);
+    }, 6000);
+    return () => window.clearInterval(timer);
+  }, [me.account?.role, me.account?.displayNameRequired, refresh]);
 
   const role = me.account?.role;
   const rewards = me.rewards || [];
@@ -1267,11 +1410,17 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
         body: JSON.stringify({ token })
       });
       setToast(`${result.participantName} 스탬프 지급 완료 (${result.stampCount}/7)`);
+      showStampEffect({
+        mode: "give",
+        title: "지급 완료",
+        detail: `${result.participantName} · ${result.stampCount}/7`,
+        imageDataUrl: me.booth?.stampImageDataUrl
+      });
       await refresh();
     } catch (err) {
       setToast(err instanceof Error ? err.message : "스탬프 지급 실패");
     }
-  }, [refresh]);
+  }, [me.booth?.stampImageDataUrl, refresh, showStampEffect]);
 
   const handleCouponScan = useCallback(async (token: string) => {
     setToast("");
@@ -1280,7 +1429,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
         method: "POST",
         body: JSON.stringify({ token })
       });
-      setToast(`${result.participantName} 쿠폰 사용 완료: ${result.rewardClubName} - ${result.rewardName}`);
+      setToast(`${result.participantName} 보상 지급 완료: ${result.rewardClubName} - ${result.rewardName}`);
       await refresh();
     } catch (err) {
       setToast(err instanceof Error ? err.message : "쿠폰 사용 실패");
@@ -1318,14 +1467,17 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       </nav>
 
       {toast && <p className={toast.includes("완료") ? "toast okToast" : "toast errorToast"}>{toast}</p>}
+      {stampEffect && <StampEffect effect={stampEffect} />}
 
-      {tab === "home" && role === "participant" && <ParticipantHome me={me} refresh={refresh} />}
-      {tab === "profile" && <ProfileEditor me={me} refresh={refresh} />}
-      {tab === "leaderboard" && <Leaderboard />}
-      {tab === "stampStudio" && <StampStudio me={me} refresh={refresh} />}
-      {tab === "boothScan" && <Scanner label="QR 지급" onScan={handleStampScan} />}
-      {tab === "tempPasses" && role === "superAdmin" && <TempPassPanel />}
-      {tab === "rewardScan" && (
+      {role === "participant" && me.account.displayNameRequired && <RequiredNamePanel refresh={refresh} />}
+
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "home" && role === "participant" && <ParticipantHome me={me} refresh={refresh} />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "profile" && <ProfileEditor me={me} refresh={refresh} />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "leaderboard" && <Leaderboard />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "stampStudio" && <StampStudio me={me} refresh={refresh} />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "boothScan" && <Scanner label="QR 지급" onScan={handleStampScan} />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "tempPasses" && role === "superAdmin" && <TempPassPanel />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "rewardScan" && (
         <div className="gridTwo">
           <section className="panel rewardAdminCard">
             <h2>보상</h2>
@@ -1336,8 +1488,8 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
           <Scanner label="QR 사용" onScan={handleCouponScan} />
         </div>
       )}
-      {tab === "codes" && <CodesPanel />}
-      {tab === "admin" && (
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "codes" && <CodesPanel />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "admin" && (
         <section className="panel">
           <div className="sectionHeader">
             <div>

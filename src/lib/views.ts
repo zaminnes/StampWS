@@ -74,6 +74,10 @@ export async function buildMePayload(account: Account, db: StampDb) {
     return {
       ...base,
       participantQrToken: await createParticipantQrToken(account.id, account.qrVersion),
+      account: {
+        ...base.account,
+        displayNameRequired: !profile.nickname || account.displayName === account.studentCode
+      },
       profile: {
         ...profile,
         avatarStampImageDataUrl: avatarStamp?.stampImageDataUrl

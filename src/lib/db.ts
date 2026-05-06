@@ -45,10 +45,10 @@ const COLLECTIONS = {
 type CollectionKey = keyof typeof COLLECTIONS;
 
 const REWARDS: RewardItem[] = [
-  { id: "chemistry", name: "Dalgona", clubName: "Chemistry", imagePath: "/rewards/dalgona.png", active: true },
-  { id: "biology", name: "Bean Powder Tea", clubName: "Biology", imagePath: "/rewards/bean-tea.png", active: true },
-  { id: "quasar", name: "Popcorn", clubName: "Quasar", imagePath: "/rewards/popcorn.png", active: true },
-  { id: "alphago", name: "Iced Tea", clubName: "Alphago", imagePath: "/rewards/iced-tea.png", active: true }
+  { id: "chemistry", name: "달고나", clubName: "화학", imagePath: "/rewards/dalgona.png", active: true },
+  { id: "biology", name: "콩가루차", clubName: "생명", imagePath: "/rewards/bean-tea.png", active: true },
+  { id: "quasar", name: "팝콘", clubName: "퀘이사", imagePath: "/rewards/popcorn.png", active: true },
+  { id: "alphago", name: "아이스티", clubName: "알파고", imagePath: "/rewards/iced-tea.png", active: true }
 ];
 
 const CLUBS = [
@@ -553,6 +553,10 @@ async function readFirestoreDb() {
 
 function normalizeDb(db: StampDb) {
   db.tempPasses ||= [];
+  db.rewards = REWARDS.map((reward) => ({
+    ...reward,
+    active: db.rewards.find((item) => item.id === reward.id)?.active ?? reward.active
+  }));
   return db;
 }
 
@@ -576,7 +580,7 @@ async function updateFirestoreDb<T>(mutator: (db: StampDb) => T | Promise<T>) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
       const snapshot = await readFirestoreSnapshot();
-      const db = snapshot.db || (await buildInitialDb()).db;
+      const db = normalizeDb(snapshot.db || (await buildInitialDb()).db);
       const result = await mutator(db);
       await commitFirestoreDb(db, snapshot);
       return result;

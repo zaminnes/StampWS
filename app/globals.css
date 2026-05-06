@@ -116,6 +116,17 @@ img {
   margin: 0;
 }
 
+.hintText {
+  background: var(--info-bg);
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  color: var(--info);
+  font-size: 13px;
+  font-weight: 750;
+  margin: -4px 0 0;
+  padding: 10px 12px;
+}
+
 .quickPanel {
   align-self: stretch;
   display: grid;
@@ -390,6 +401,109 @@ textarea {
   padding: 12px 14px;
 }
 
+.stampEffect {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #bfdbfe;
+  border-radius: 18px;
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 86px 1fr;
+  left: 50%;
+  max-width: min(420px, calc(100vw - 28px));
+  min-height: 118px;
+  overflow: hidden;
+  padding: 16px;
+  position: fixed;
+  top: 18px;
+  transform: translateX(-50%);
+  width: 420px;
+  z-index: 40;
+  animation: effectIn 1800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.stampEffect.give {
+  border-color: #bbf7d0;
+}
+
+.effectStamp {
+  align-items: center;
+  aspect-ratio: 1;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  transform: rotate(-6deg);
+  animation: stampPop 720ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+
+.effectStamp img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.effectStamp span {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.effectText {
+  display: grid;
+  gap: 5px;
+}
+
+.effectText strong {
+  font-size: 20px;
+}
+
+.effectText span {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.burstRing {
+  border: 2px solid rgba(37, 99, 235, 0.38);
+  border-radius: 999px;
+  height: 120px;
+  left: 28px;
+  position: absolute;
+  top: 4px;
+  width: 120px;
+  animation: burst 900ms ease-out both;
+}
+
+.spark {
+  background: var(--primary);
+  border-radius: 999px;
+  height: 7px;
+  position: absolute;
+  width: 7px;
+}
+
+.spark.s1 {
+  left: 34px;
+  top: 24px;
+  animation: sparkOne 980ms ease-out both;
+}
+
+.spark.s2 {
+  left: 112px;
+  top: 22px;
+  animation: sparkTwo 980ms ease-out both;
+}
+
+.spark.s3 {
+  left: 130px;
+  top: 94px;
+  animation: sparkThree 980ms ease-out both;
+}
+
 .okToast {
   background: var(--success-bg);
   border-color: #bbf7d0;
@@ -440,6 +554,11 @@ textarea {
 
 .widePanel {
   grid-column: 1 / -1;
+}
+
+.requiredNamePanel {
+  margin: 0 auto;
+  max-width: 480px;
 }
 
 .sectionHeader {
@@ -690,6 +809,44 @@ textarea {
   gap: 12px;
 }
 
+.stampList {
+  display: grid;
+  gap: 10px;
+}
+
+.stampRecord {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 58px 1fr auto;
+  min-height: 76px;
+  padding: 9px 12px 9px 9px;
+}
+
+.stampRecord img {
+  aspect-ratio: 1;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  object-fit: cover;
+  width: 58px;
+}
+
+.stampRecord strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.stampRecord span:not(.pill) {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .stampTile {
   background: var(--surface-soft);
   border: 1px solid var(--line);
@@ -746,6 +903,39 @@ textarea {
   max-width: 360px;
   touch-action: none;
   width: 100%;
+}
+
+.stampPreview {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: inline-grid;
+  gap: 10px;
+  justify-items: center;
+  margin: 12px 0 0;
+  padding: 12px;
+  width: 156px;
+}
+
+.stampPreview span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.stampPreview img,
+.stampPreview strong {
+  align-items: center;
+  aspect-ratio: 1;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  font-size: 12px;
+  justify-content: center;
+  object-fit: cover;
+  width: 112px;
 }
 
 .scanPanel {
@@ -860,6 +1050,12 @@ th {
   font-weight: 900;
   padding: 10px 8px;
   text-align: center;
+}
+
+.scoreBox.pending {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--primary);
 }
 
 .metricGrid {
@@ -990,6 +1186,80 @@ th {
   display: inline-flex;
   justify-self: start;
   padding: 5px 8px;
+}
+
+@keyframes effectIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -12px) scale(0.96);
+  }
+  14%,
+  78% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.98);
+  }
+}
+
+@keyframes stampPop {
+  0% {
+    opacity: 0;
+    transform: rotate(-14deg) scale(1.8);
+  }
+  54% {
+    opacity: 1;
+    transform: rotate(-6deg) scale(0.92);
+  }
+  100% {
+    transform: rotate(-6deg) scale(1);
+  }
+}
+
+@keyframes burst {
+  from {
+    opacity: 0.7;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+@keyframes sparkOne {
+  from {
+    opacity: 1;
+    transform: translate(30px, 44px) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-10px, -8px) scale(0.4);
+  }
+}
+
+@keyframes sparkTwo {
+  from {
+    opacity: 1;
+    transform: translate(-30px, 48px) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(16px, -12px) scale(0.4);
+  }
+}
+
+@keyframes sparkThree {
+  from {
+    opacity: 1;
+    transform: translate(-42px, -18px) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(22px, 20px) scale(0.4);
+  }
 }
 
 @media (max-width: 860px) {

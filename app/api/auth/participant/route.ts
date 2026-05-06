@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createSession, setSessionCookie } from "@/lib/auth";
-import { clientFingerprint, hashFingerprint, hashPassword, hashToken, normalizeLoginId, randomId, sanitizeDisplayName } from "@/lib/crypto";
+import { clientFingerprint, hashFingerprint, hashPassword, hashToken, normalizeLoginId, randomId } from "@/lib/crypto";
 import { updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
 import { rateLimit } from "@/lib/rate-limit";
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const { ip, userAgent } = clientFingerprint(request.headers);
     rateLimit(`participant-entry:${ip}`, 25, 10 * 60 * 1000);
 
-    const body = (await request.json()) as { studentCode?: string; displayName?: string; cacheKey?: string };
+    const body = (await request.json()) as { studentCode?: string; cacheKey?: string };
     const studentCode = normalizeStudentCode(body.studentCode || "");
     const loginIdLower = normalizeLoginId(studentCode);
     const now = new Date().toISOString();
@@ -62,14 +62,13 @@ export async function POST(request: NextRequest) {
         return existing;
       }
 
-      const displayName = sanitizeDisplayName(body.displayName || "");
       const newAccount = {
         id: randomId("acc"),
         loginId: studentCode,
         loginIdLower,
         passwordHash: await hashPassword(randomId("participant")),
         role: "participant" as const,
-        displayName,
+        displayName: studentCode,
         studentCode,
         participantCacheHash: nextCacheHash,
         qrVersion: 1,
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest) {
       db.accounts.push(newAccount);
       db.profiles.push({
         accountId: newAccount.id,
-        nickname: displayName,
+        nickname: "",
         bio: "",
         themeId: "science",
         frameId: "clean",
