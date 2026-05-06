@@ -1614,6 +1614,89 @@ th {
   margin: 0;
 }
 
+.securityPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.securityGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+}
+
+.securityBox {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.securityHead,
+.securityRow {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.securityHead strong {
+  font-size: 15px;
+}
+
+.securityHead span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.securityList {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.securityRow {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.securityRow.blocked {
+  background: var(--danger-bg);
+  border-color: #fecaca;
+}
+
+.securityRow.failed {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.securityRow.success {
+  background: #fff;
+}
+
+.securityRow div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.securityRow strong {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.securityRow span,
+.securityRow small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .secondaryLink {
   align-items: center;
   background: #f3f4f6;
@@ -1979,6 +2062,7 @@ th {
 
   .accountTools,
   .boothNameRow,
+  .securityGrid,
   .teaCustomerHero,
   .teaStockBox,
   .teaQueueRow {

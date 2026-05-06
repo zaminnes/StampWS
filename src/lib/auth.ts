@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { clientFingerprint, hashFingerprint, hashToken, randomId } from "./crypto";
 import { readDb, updateDb } from "./db";
 import { HttpError } from "./http";
-import type { Account, Role, Session } from "./types";
+import type { Account, LoginEvent, Role, Session } from "./types";
 
 export const SESSION_COOKIE = "wshs_stamp_session";
+export const DEVICE_COOKIE = "wshs_stamp_device";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
+const DEVICE_MAX_AGE_SECONDS = 60 * 60 * 24 * 60;
+const PARTICIPANT_SWITCH_WINDOW_MS = 10 * 60 * 1000;
+const PARTICIPANT_SWITCH_LIMIT = 3;
 
 export type CurrentSession = {
   account: Account;
@@ -20,21 +24,101 @@ function getCookieToken(request: NextRequest) {
   return { sessionId, token };
 }
 
+function summarizeUserAgent(userAgent: string) {
+  const browser = userAgent.includes("CriOS") || userAgent.includes("Chrome")
+    ? "Chrome"
+    : userAgent.includes("Safari")
+      ? "Safari"
+      : userAgent.includes("Firefox")
+        ? "Firefox"
+        : "Browser";
+  const os = userAgent.includes("iPhone")
+    ? "iPhone"
+    : userAgent.includes("Android")
+      ? "Android"
+      : userAgent.includes("Macintosh")
+        ? "Mac"
+        : userAgent.includes("Windows")
+          ? "Windows"
+          : "Device";
+  return `${os} · ${browser}`;
+}
+
+export async function getRequestDevice(request: NextRequest) {
+  const deviceId = request.cookies.get(DEVICE_COOKIE)?.value || randomId("dev");
+  const { ip, userAgent } = clientFingerprint(request.headers);
+  return {
+    deviceId,
+    deviceHash: await hashToken(deviceId),
+    ip,
+    userAgent,
+    ipHash: await hashFingerprint(ip),
+    userAgentHash: await hashFingerprint(userAgent),
+    userAgentSummary: summarizeUserAgent(userAgent)
+  };
+}
+
+function loginEventFor(device: Awaited<ReturnType<typeof getRequestDevice>>, data: Omit<LoginEvent, "id" | "deviceHash" | "ipHash" | "userAgentHash" | "userAgentSummary" | "createdAt"> & { createdAt?: string }) {
+  return {
+    id: randomId("login"),
+    ...data,
+    deviceHash: device.deviceHash,
+    ipHash: device.ipHash,
+    userAgentHash: device.userAgentHash,
+    userAgentSummary: device.userAgentSummary,
+    createdAt: data.createdAt || new Date().toISOString()
+  };
+}
+
+export async function recordLoginFailure(request: NextRequest, loginId: string, reason: string, role?: Role) {
+  const device = await getRequestDevice(request);
+  await updateDb((db) => {
+    db.loginEvents ||= [];
+    db.loginEvents.push(loginEventFor(device, {
+      loginId,
+      role,
+      result: "failed",
+      reason
+    }));
+    db.loginEvents = db.loginEvents.slice(-500);
+  });
+}
+
+export async function assertParticipantDeviceAllowed(request: NextRequest, loginId: string) {
+  const device = await getRequestDevice(request);
+  const db = await readDb();
+  const block = db.deviceBlocks.find((item) => item.deviceHash === device.deviceHash && item.active);
+  if (!block) return device;
+
+  await updateDb((currentDb) => {
+    currentDb.loginEvents ||= [];
+    currentDb.loginEvents.push(loginEventFor(device, {
+      loginId,
+      role: "participant",
+      result: "blocked",
+      reason: block.reason
+    }));
+    currentDb.loginEvents = currentDb.loginEvents.slice(-500);
+  });
+  throw new HttpError(423, "이 기기는 여러 참가자 계정 로그인으로 잠겼습니다. 관리자에게 문의하세요.");
+}
+
 export async function createSession(account: Account, request: NextRequest) {
   const now = new Date();
   const token = randomId("tok");
   const tokenHash = await hashToken(token);
-  const { ip, userAgent } = clientFingerprint(request.headers);
+  const device = await getRequestDevice(request);
   const session: Session = {
     id: randomId("sess"),
     accountId: account.id,
     tokenHash,
     role: account.role,
+    deviceHash: device.deviceHash,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + SESSION_MAX_AGE_SECONDS * 1000).toISOString(),
     revoked: false,
-    ipHash: await hashFingerprint(ip),
-    userAgentHash: await hashFingerprint(userAgent)
+    ipHash: device.ipHash,
+    userAgentHash: device.userAgentHash
   };
 
   await updateDb((db) => {
@@ -42,12 +126,47 @@ export async function createSession(account: Account, request: NextRequest) {
     db.sessions.push(session);
     const storedAccount = db.accounts.find((item) => item.id === account.id);
     if (storedAccount) storedAccount.lastLoginAt = now.toISOString();
+    db.loginEvents ||= [];
+    db.deviceBlocks ||= [];
+    db.loginEvents.push(loginEventFor(device, {
+      accountId: account.id,
+      loginId: account.loginId,
+      role: account.role,
+      displayName: account.displayName,
+      result: "success",
+      createdAt: now.toISOString()
+    }));
+    db.loginEvents = db.loginEvents.slice(-500);
+
+    if (account.role === "participant") {
+      const since = new Date(now.getTime() - PARTICIPANT_SWITCH_WINDOW_MS).toISOString();
+      const recentParticipantLogins = db.loginEvents.filter((event) => (
+        event.deviceHash === device.deviceHash &&
+        event.role === "participant" &&
+        event.result === "success" &&
+        event.createdAt >= since &&
+        Boolean(event.accountId)
+      ));
+      const accountIds = [...new Set(recentParticipantLogins.map((event) => event.accountId).filter(Boolean))] as string[];
+      if (accountIds.length >= PARTICIPANT_SWITCH_LIMIT && !db.deviceBlocks.some((block) => block.deviceHash === device.deviceHash && block.active)) {
+        const loginIds = [...new Set(recentParticipantLogins.map((event) => event.loginId))];
+        db.deviceBlocks.push({
+          id: randomId("devblk"),
+          deviceHash: device.deviceHash,
+          reason: "짧은 시간에 여러 참가자 계정 로그인",
+          accountIds,
+          loginIds,
+          active: true,
+          createdAt: now.toISOString()
+        });
+      }
+    }
   });
 
-  return { session, token };
+  return { session, token, deviceId: device.deviceId };
 }
 
-export function setSessionCookie(response: NextResponse, sessionId: string, token: string) {
+export function setSessionCookie(response: NextResponse, sessionId: string, token: string, deviceId?: string) {
   response.cookies.set({
     name: SESSION_COOKIE,
     value: `${sessionId}.${token}`,
@@ -57,6 +176,17 @@ export function setSessionCookie(response: NextResponse, sessionId: string, toke
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS
   });
+  if (deviceId) {
+    response.cookies.set({
+      name: DEVICE_COOKIE,
+      value: deviceId,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: DEVICE_MAX_AGE_SECONDS
+    });
+  }
 }
 
 export function clearSessionCookie(response: NextResponse) {

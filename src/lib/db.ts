@@ -8,6 +8,8 @@ import type {
   Booth,
   ClubNotice,
   Coupon,
+  DeviceBlock,
+  LoginEvent,
   NameChangeLog,
   Profile,
   RewardId,
@@ -43,7 +45,9 @@ const COLLECTIONS = {
   profiles: "stampAppProfiles",
   userStats: "stampAppUserStats",
   nameChangeLogs: "stampAppNameChangeLogs",
-  auditLogs: "stampAppAuditLogs"
+  auditLogs: "stampAppAuditLogs",
+  loginEvents: "stampAppLoginEvents",
+  deviceBlocks: "stampAppDeviceBlocks"
 } as const;
 
 type CollectionKey = keyof typeof COLLECTIONS;
@@ -244,7 +248,9 @@ async function buildInitialDb() {
     profiles: [],
     userStats: [],
     nameChangeLogs: [],
-    auditLogs: []
+    auditLogs: [],
+    loginEvents: [],
+    deviceBlocks: []
   };
 
   return { db, bootstrapLines };
@@ -407,6 +413,8 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
   const userStats = await listCollection<UserStats>("userStats");
   const nameChangeLogs = await listCollection<NameChangeLog>("nameChangeLogs");
   const auditLogs = await listCollection<AuditLog>("auditLogs");
+  const loginEvents = await listCollection<LoginEvent>("loginEvents");
+  const deviceBlocks = await listCollection<DeviceBlock>("deviceBlocks");
 
   return {
     db: {
@@ -424,7 +432,9 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       profiles: profiles.items,
       userStats: userStats.items,
       nameChangeLogs: nameChangeLogs.items,
-      auditLogs: auditLogs.items
+      auditLogs: auditLogs.items,
+      loginEvents: loginEvents.items,
+      deviceBlocks: deviceBlocks.items
     },
     metaUpdateTime: metaDoc.updateTime,
     payloads: {
@@ -441,7 +451,9 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       profiles: profiles.payloads,
       userStats: userStats.payloads,
       nameChangeLogs: nameChangeLogs.payloads,
-      auditLogs: auditLogs.payloads
+      auditLogs: auditLogs.payloads,
+      loginEvents: loginEvents.payloads,
+      deviceBlocks: deviceBlocks.payloads
     },
     names: {
       accounts: accounts.names,
@@ -457,7 +469,9 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       profiles: profiles.names,
       userStats: userStats.names,
       nameChangeLogs: nameChangeLogs.names,
-      auditLogs: auditLogs.names
+      auditLogs: auditLogs.names,
+      loginEvents: loginEvents.names,
+      deviceBlocks: deviceBlocks.names
     }
   };
 }
@@ -477,7 +491,9 @@ function emptyPayloadMaps(): Record<CollectionKey, Map<string, string>> {
     profiles: new Map(),
     userStats: new Map(),
     nameChangeLogs: new Map(),
-    auditLogs: new Map()
+    auditLogs: new Map(),
+    loginEvents: new Map(),
+    deviceBlocks: new Map()
   };
 }
 
@@ -496,7 +512,9 @@ function emptyNameSets(): Record<CollectionKey, Set<string>> {
     profiles: new Set(),
     userStats: new Set(),
     nameChangeLogs: new Set(),
-    auditLogs: new Set()
+    auditLogs: new Set(),
+    loginEvents: new Set(),
+    deviceBlocks: new Set()
   };
 }
 
@@ -561,6 +579,8 @@ async function commitFirestoreDb(db: StampDb, snapshot: FirestoreSnapshot) {
   addCollectionWrites(writes, "userStats", db.userStats, snapshot.payloads.userStats, snapshot.names.userStats);
   addCollectionWrites(writes, "nameChangeLogs", db.nameChangeLogs, snapshot.payloads.nameChangeLogs, snapshot.names.nameChangeLogs);
   addCollectionWrites(writes, "auditLogs", db.auditLogs, snapshot.payloads.auditLogs, snapshot.names.auditLogs);
+  addCollectionWrites(writes, "loginEvents", db.loginEvents, snapshot.payloads.loginEvents, snapshot.names.loginEvents);
+  addCollectionWrites(writes, "deviceBlocks", db.deviceBlocks, snapshot.payloads.deviceBlocks, snapshot.names.deviceBlocks);
 
   for (let index = 0; index < writes.length; index += 400) {
     await firestoreRequest(`${FIRESTORE_API}/projects/${getProjectId()}/databases/(default)/documents:commit`, {
@@ -582,6 +602,8 @@ function normalizeDb(db: StampDb) {
   db.tempPasses ||= [];
   db.teaReservations ||= [];
   db.clubNotices ||= [];
+  db.loginEvents ||= [];
+  db.deviceBlocks ||= [];
   db.rewards = REWARDS.map((reward) => ({
     ...reward,
     active: db.rewards.find((item) => item.id === reward.id)?.active ?? reward.active
@@ -678,6 +700,8 @@ export async function resetDbToClubSetup(actorAccountId: string, ipHash: string,
     db.profiles = [];
     db.userStats = [];
     db.nameChangeLogs = [];
+    db.loginEvents = [];
+    db.deviceBlocks = [];
     db.auditLogs = [
       {
         id: randomId("audit"),

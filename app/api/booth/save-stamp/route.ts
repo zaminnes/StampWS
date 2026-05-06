@@ -16,8 +16,8 @@ export async function POST(request: NextRequest) {
     const current = await requireRole(request, ["boothAdmin"]);
     rateLimit(`stamp-design:${current.account.id}`, 20, 10 * 60 * 1000);
     const { ip, userAgent } = clientFingerprint(request.headers);
-    const body = (await request.json()) as { boothId?: string; imageDataUrl?: string };
-    const imageDataUrl = validateStampImage(body.imageDataUrl || "");
+    const body = (await request.json()) as { boothId?: string; imageDataUrl?: string; reset?: boolean };
+    const imageDataUrl = body.reset ? "" : validateStampImage(body.imageDataUrl || "");
 
     await updateDb(async (db) => {
       const account = db.accounts.find((item) => item.id === current.account.id);
@@ -26,12 +26,16 @@ export async function POST(request: NextRequest) {
       if (!booth || !booth.active) throw new HttpError(404, "부스를 찾을 수 없습니다.");
 
       const now = new Date().toISOString();
-      booth.stampImageDataUrl = imageDataUrl;
+      if (body.reset) {
+        delete booth.stampImageDataUrl;
+      } else {
+        booth.stampImageDataUrl = imageDataUrl;
+      }
       booth.stampDesignUpdatedAt = now;
       db.auditLogs.push({
         id: randomId("audit"),
         actorAccountId: account.id,
-        action: "booth.stampDesign.save",
+        action: body.reset ? "booth.stampDesign.reset" : "booth.stampDesign.save",
         targetId: booth.id,
         createdAt: now,
         ipHash: await hashFingerprint(ip),

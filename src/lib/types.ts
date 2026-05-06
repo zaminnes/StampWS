@@ -28,6 +28,7 @@ export type Session = {
   accountId: string;
   tokenHash: string;
   role: Role;
+  deviceHash?: string;
   createdAt: string;
   expiresAt: string;
   revoked: boolean;
@@ -185,6 +186,33 @@ export type AuditLog = {
   metadata?: Record<string, string | number | boolean | null>;
 };
 
+export type LoginEvent = {
+  id: string;
+  accountId?: string;
+  loginId: string;
+  role?: Role;
+  displayName?: string;
+  result: "success" | "failed" | "blocked";
+  reason?: string;
+  deviceHash: string;
+  ipHash: string;
+  userAgentHash: string;
+  userAgentSummary: string;
+  createdAt: string;
+};
+
+export type DeviceBlock = {
+  id: string;
+  deviceHash: string;
+  reason: string;
+  accountIds: string[];
+  loginIds: string[];
+  active: boolean;
+  createdAt: string;
+  releasedAt?: string;
+  releasedByAccountId?: string;
+};
+
 export type StampDb = {
   meta: {
     createdAt: string;
@@ -213,4 +241,6 @@ export type StampDb = {
   userStats: UserStats[];
   nameChangeLogs: NameChangeLog[];
   auditLogs: AuditLog[];
+  loginEvents: LoginEvent[];
+  deviceBlocks: DeviceBlock[];
 };

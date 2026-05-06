@@ -118,6 +118,44 @@ type NoticePayload = {
   postClubName: string;
 };
 
+type SecurityLoginRow = {
+  id: string;
+  loginId: string;
+  displayName: string;
+  role: string;
+  result: "success" | "failed" | "blocked";
+  reason: string;
+  deviceShort: string;
+  userAgentSummary: string;
+  createdAt: string;
+};
+
+type SecurityActivityRow = {
+  id: string;
+  actorDisplayName: string;
+  actorLoginId: string;
+  action: string;
+  targetId: string;
+  detail: string;
+  createdAt: string;
+};
+
+type SecurityDeviceBlockRow = {
+  id: string;
+  deviceShort: string;
+  reason: string;
+  loginIds: string[];
+  active: boolean;
+  createdAt: string;
+  releasedAt?: string;
+};
+
+type SecurityPayload = {
+  loginEvents: SecurityLoginRow[];
+  activityEvents: SecurityActivityRow[];
+  deviceBlocks: SecurityDeviceBlockRow[];
+};
+
 type AdminAccountRow = {
   id: string;
   loginId: string;
@@ -1500,6 +1538,23 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
     }
   }
 
+  async function resetStamp() {
+    setMessage("");
+    if (!selectedBooth) return;
+    if (!window.confirm(`${selectedBooth.name} 도장을 기본값으로 되돌릴까요?`)) return;
+    try {
+      await apiJson("/api/booth/save-stamp", {
+        method: "POST",
+        body: JSON.stringify({ boothId: selectedBooth.id, reset: true })
+      });
+      await refresh();
+      clearCanvas();
+      setMessage("원본 리셋");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "리셋 실패");
+    }
+  }
+
   async function saveBoothName() {
     setMessage("");
     if (!selectedBooth) return;
@@ -1516,6 +1571,7 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
   }
 
   return (
+    <>
     <section className="panel">
       <div className="sectionHeader">
         <div>
@@ -1563,9 +1619,14 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
         <span>미리보기</span>
         {previewDataUrl ? <img src={previewDataUrl} alt="도장 미리보기" /> : <strong>STAMP</strong>}
       </div>
-      {message && <p className={message.includes("저장") && !message.includes("실패") ? "statusText" : "errorText"}>{message}</p>}
-      <button className="primaryButton" disabled={!selectedBooth} onClick={saveStamp} type="button">저장</button>
+      {message && <p className={(message.includes("저장") || message.includes("리셋")) && !message.includes("실패") ? "statusText" : "errorText"}>{message}</p>}
+      <div className="buttonRow">
+        <button className="primaryButton" disabled={!selectedBooth} onClick={saveStamp} type="button">저장</button>
+        <button className="secondaryButton" disabled={!selectedBooth} onClick={resetStamp} type="button">원본 리셋</button>
+      </div>
     </section>
+    {me.account?.role === "boothAdmin" && <BoothNamesPanel me={me} refresh={refresh} />}
+    </>
   );
 }
 
@@ -1998,12 +2059,16 @@ function DefaultStampPanel({ me, refresh }: { me: MePayload; refresh: () => Prom
 function BoothNamesPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
   const [names, setNames] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
+  const editableBooths = useMemo(
+    () => me.account?.role === "boothAdmin" ? (me.managedBooths || []) : (me.booths || []),
+    [me.account?.role, me.booths, me.managedBooths]
+  );
 
   useEffect(() => {
     const next: Record<string, string> = {};
-    for (const booth of me.booths || []) next[booth.id] = booth.name;
+    for (const booth of editableBooths) next[booth.id] = booth.name;
     setNames(next);
-  }, [me.booths]);
+  }, [editableBooths]);
 
   async function saveBoothName(boothId: string) {
     setMessage("");
@@ -2029,7 +2094,7 @@ function BoothNamesPanel({ me, refresh }: { me: MePayload; refresh: () => Promis
       </div>
       {message && <p className={message.includes("저장") ? "statusText" : "errorText"}>{message}</p>}
       <div className="boothNameGrid">
-        {(me.booths || []).map((booth) => (
+        {editableBooths.map((booth) => (
           <div className="boothNameRow" key={booth.id}>
             <div>
               <strong>{booth.id}</strong>
@@ -2124,6 +2189,116 @@ function AccountAdminPanel() {
             ))}
           </tbody>
         </table>
+      </div>
+    </section>
+  );
+}
+
+function SecurityLogPanel() {
+  const [data, setData] = useState<SecurityPayload>({ loginEvents: [], activityEvents: [], deviceBlocks: [] });
+  const [message, setMessage] = useState("");
+
+  const load = useCallback(async () => {
+    const next = await apiJson<SecurityPayload>("/api/admin/security", { method: "GET" });
+    setData(next);
+  }, []);
+
+  useEffect(() => {
+    load().catch((err) => setMessage(err instanceof Error ? err.message : "보안 로그 실패"));
+  }, [load]);
+
+  async function releaseBlock(blockId: string) {
+    setMessage("");
+    try {
+      await apiJson("/api/admin/security", {
+        method: "PATCH",
+        body: JSON.stringify({ blockId })
+      });
+      await load();
+      setMessage("차단 해제");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "해제 실패");
+    }
+  }
+
+  return (
+    <section className="panel widePanel securityPanel">
+      <div className="sectionHeader">
+        <div>
+          <h2>보안 로그</h2>
+          <p>참가자 계정 전환 감지.</p>
+        </div>
+        <button className="secondaryButton" onClick={load} type="button">새로고침</button>
+      </div>
+      {message && <p className={message.includes("해제") ? "statusText" : "errorText"}>{message}</p>}
+      <div className="securityGrid">
+        <div className="securityBox">
+          <div className="securityHead">
+            <strong>기기 차단</strong>
+            <span>{data.deviceBlocks.filter((block) => block.active).length}건</span>
+          </div>
+          <div className="securityList">
+            {data.deviceBlocks.map((block) => (
+              <div className={`securityRow ${block.active ? "blocked" : ""}`} key={block.id}>
+                <div>
+                  <strong>{block.deviceShort}</strong>
+                  <span>{block.reason}</span>
+                  <small>{block.loginIds.join(", ") || "-"} · {formatTime(block.createdAt)}</small>
+                </div>
+                {block.active ? <button className="secondaryButton" onClick={() => releaseBlock(block.id)} type="button">해제</button> : <span className="pill done">해제됨</span>}
+              </div>
+            ))}
+            {data.deviceBlocks.length === 0 && <p className="emptyText">차단 없음</p>}
+          </div>
+        </div>
+        <div className="securityBox">
+          <div className="securityHead">
+            <strong>로그인</strong>
+            <span>{data.loginEvents.length}건</span>
+          </div>
+          <div className="securityList">
+            {data.loginEvents.slice(0, 80).map((event) => (
+              <div className={`securityRow ${event.result}`} key={event.id}>
+                <div>
+                  <strong>{event.loginId} · {event.displayName}</strong>
+                  <span>{event.result === "success" ? "성공" : event.result === "blocked" ? "차단" : "실패"} · {roleLabel(event.role as Role)} · {event.deviceShort}</span>
+                  <small>{event.userAgentSummary} · {formatTime(event.createdAt)} {event.reason ? `· ${event.reason}` : ""}</small>
+                </div>
+              </div>
+            ))}
+            {data.loginEvents.length === 0 && <p className="emptyText">로그 없음</p>}
+          </div>
+        </div>
+      </div>
+      <div className="securityBox">
+        <div className="securityHead">
+          <strong>활동</strong>
+          <span>{data.activityEvents.length}건</span>
+        </div>
+        <div className="tableWrap compactTable">
+          <table>
+            <thead>
+              <tr>
+                <th>시간</th>
+                <th>계정</th>
+                <th>활동</th>
+                <th>대상</th>
+                <th>세부</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.activityEvents.slice(0, 120).map((event) => (
+                <tr key={event.id}>
+                  <td>{formatTime(event.createdAt)}</td>
+                  <td>{event.actorLoginId} · {event.actorDisplayName}</td>
+                  <td>{event.action}</td>
+                  <td>{event.targetId || "-"}</td>
+                  <td>{event.detail || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );
@@ -2553,6 +2728,7 @@ function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<voi
       </section>
       <DefaultStampPanel me={me} refresh={refresh} />
       <AccountAdminPanel />
+      <SecurityLogPanel />
       <BoothNamesPanel me={me} refresh={refresh} />
       <DatabaseResetPanel refresh={refresh} />
     </div>
@@ -2669,7 +2845,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
     ] as Array<[AppTab, string]>;
     if (role === "boothAdmin") return [
       ["boothScan", "지급"],
-      ["rewardScan", "사용"],
+      ["rewardScan", "쿠폰사용"],
       ...(teaAccess ? [["teaMaker", "티메이커"] as [AppTab, string]] : []),
       ["stampStudio", "도장"],
       ["notices", "공지"],
@@ -2677,7 +2853,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       ["leaderboard", "랭킹"]
     ] as Array<[AppTab, string]>;
     if (role === "rewardAdmin") return [
-      ["rewardScan", "사용"],
+      ["rewardScan", "쿠폰사용"],
       ...(teaAccess ? [["teaMaker", "티메이커"] as [AppTab, string]] : []),
       ["notices", "공지"],
       ["codes", "코드"],
@@ -2782,13 +2958,13 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       {!(role === "participant" && me.account.displayNameRequired) && tab === "rewardScan" && (
         <div className="gridTwo">
           <section className="panel rewardAdminCard">
-            <h2>보상</h2>
+            <h2>쿠폰 사용</h2>
             <p>{rewardLabel(rewards.find((reward) => reward.id === me.account?.rewardId))}</p>
             {rewardDetail(me.account?.rewardId) && <small>{rewardDetail(me.account?.rewardId)}</small>}
             <strong>{me.redeemedCount || 0}</strong>
-            <span>사용</span>
+            <span>쿠폰 사용</span>
           </section>
-          <Scanner label="QR 사용" onScan={handleCouponScan} />
+          <Scanner label="쿠폰 QR 사용" onScan={handleCouponScan} />
         </div>
       )}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "codes" && <CodesPanel />}

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { createSession, setSessionCookie } from "@/lib/auth";
+import { assertParticipantDeviceAllowed, createSession, setSessionCookie } from "@/lib/auth";
 import { clientFingerprint, hashFingerprint, hashPassword, hashToken, normalizeLoginId, randomId } from "@/lib/crypto";
 import { updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as { studentCode?: string; cacheKey?: string };
     const studentCode = normalizeStudentCode(body.studentCode || "");
     const loginIdLower = normalizeLoginId(studentCode);
+    await assertParticipantDeviceAllowed(request, loginIdLower);
     const now = new Date().toISOString();
     const nextCacheKey = randomId("pkey");
     const nextCacheHash = await hashToken(nextCacheKey);
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
       return newAccount;
     });
 
-    const { session, token } = await createSession(account, request);
+    const { session, token, deviceId } = await createSession(account, request);
     const response = jsonOk({
       ok: true,
       participantCache: {
@@ -114,7 +115,7 @@ export async function POST(request: NextRequest) {
         cacheKey: nextCacheKey
       }
     });
-    setSessionCookie(response, session.id, token);
+    setSessionCookie(response, session.id, token, deviceId);
     return response;
   } catch (error) {
     return jsonError(error);

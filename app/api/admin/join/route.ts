@@ -105,9 +105,9 @@ export async function POST(request: NextRequest) {
       return newAccount;
     });
 
-    const { session, token } = await createSession(account, request);
+    const { session, token, deviceId } = await createSession(account, request);
     const response = jsonOk({ ok: true });
-    setSessionCookie(response, session.id, token);
+    setSessionCookie(response, session.id, token, deviceId);
     return response;
   } catch (error) {
     return jsonError(error);
