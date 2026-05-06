@@ -71,8 +71,6 @@ type AdminAccountRow = {
   lastLoginAt?: string;
 };
 
-type PrinterType = "normal" | "mini";
-
 type BluetoothWriteCharacteristic = {
   writeValue?: (value: Uint8Array) => Promise<void>;
   writeValueWithoutResponse?: (value: Uint8Array) => Promise<void>;
@@ -258,10 +256,7 @@ function roleLabel(role?: Role) {
   return "-";
 }
 
-const PRINTER_WIDTHS: Record<PrinterType, number> = {
-  normal: 576,
-  mini: 384
-};
+const PRINTER_WIDTH = 576;
 
 const PRINTER_SERVICES = [
   { svc: "00005000-d102-11e1-9b23-74f07d000000", write: "00005001-d102-11e1-9b23-74f07d000000", name: "NEMONIC" },
@@ -297,10 +292,10 @@ function fitText(value: string, maxLength: number) {
   return Array.from(value).slice(0, maxLength).join("");
 }
 
-async function renderTempPassCanvas(pass: TempPassView, printerType: PrinterType) {
+async function renderTempPassCanvas(pass: TempPassView) {
   if (!pass.qrToken) throw new Error("인쇄할 QR 토큰이 없습니다.");
-  const width = PRINTER_WIDTHS[printerType];
-  const height = printerType === "mini" ? 360 : 420;
+  const width = PRINTER_WIDTH;
+  const height = 420;
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -313,17 +308,17 @@ async function renderTempPassCanvas(pass: TempPassView, printerType: PrinterType
   context.lineWidth = 2;
   context.strokeRect(14, 14, width - 28, height - 28);
 
-  drawCenteredText(context, "WSHS SCIENCE", 34, width, printerType === "mini" ? 22 : 26, 900);
-  drawCenteredText(context, fitText(pass.displayName || pass.label, 12), printerType === "mini" ? 68 : 76, width, printerType === "mini" ? 30 : 38, 900);
+  drawCenteredText(context, "WSHS SCIENCE", 34, width, 26, 900);
+  drawCenteredText(context, fitText(pass.displayName || pass.label, 12), 76, width, 38, 900);
 
-  const qrSize = printerType === "mini" ? 188 : 244;
+  const qrSize = 244;
   const qrX = Math.round((width - qrSize) / 2);
-  const qrY = printerType === "mini" ? 116 : 138;
+  const qrY = 138;
   const qrImage = await loadCanvasImage(`/api/qr?value=${encodeURIComponent(publicQrValue(pass.qrToken))}`);
   context.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-  drawCenteredText(context, "7개 완료 후 보상 부스 스캔", qrY + qrSize + 22, width, printerType === "mini" ? 18 : 22, 800);
-  drawCenteredText(context, `${pass.label} · 현장 임시권`, qrY + qrSize + (printerType === "mini" ? 48 : 56), width, printerType === "mini" ? 14 : 16, 700);
+  drawCenteredText(context, "7개 완료 후 보상 부스 스캔", qrY + qrSize + 22, width, 22, 800);
+  drawCenteredText(context, `${pass.label} · 현장 임시권`, qrY + qrSize + 56, width, 16, 700);
 
   return canvas;
 }
@@ -449,7 +444,7 @@ async function connectNemonicPrinter() {
   }
 }
 
-async function printTempPasses(passes: TempPassView[], printerType: PrinterType, onProgress: (progress: number) => void) {
+async function printTempPasses(passes: TempPassView[], onProgress: (progress: number) => void) {
   const printable = passes.filter((pass) => pass.status === "active" && pass.qrToken);
   if (printable.length === 0) throw new Error("인쇄할 임시 QR이 없습니다.");
 
@@ -459,7 +454,7 @@ async function printTempPasses(passes: TempPassView[], printerType: PrinterType,
   await delay(200);
 
   for (const [index, pass] of printable.entries()) {
-    const canvas = await renderTempPassCanvas(pass, printerType);
+    const canvas = await renderTempPassCanvas(pass);
     const context = canvas.getContext("2d");
     if (!context) throw new Error("인쇄 캔버스를 읽지 못했습니다.");
     const bwData = toBW(context, canvas.width, canvas.height);
@@ -1283,7 +1278,6 @@ function TempPassPanel() {
   const [selectedPassIds, setSelectedPassIds] = useState<Set<string>>(new Set());
   const [count, setCount] = useState(4);
   const [displayNames, setDisplayNames] = useState("");
-  const [printerType, setPrinterType] = useState<PrinterType>("normal");
   const [busy, setBusy] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -1335,7 +1329,7 @@ function TempPassPanel() {
     setProgress(0);
     setMessage("");
     try {
-      await printTempPasses(printTargets, printerType, setProgress);
+      await printTempPasses(printTargets, setProgress);
       setMessage(`${printTargets.length}개 네모닉 인쇄 완료`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "네모닉 인쇄 실패");
@@ -1384,13 +1378,10 @@ function TempPassPanel() {
           메모
           <textarea value={displayNames} onChange={(event) => setDisplayNames(event.target.value)} placeholder="선택 입력" rows={3} />
         </label>
-        <label>
-          네모닉
-          <select value={printerType} onChange={(event) => setPrinterType(event.target.value as PrinterType)}>
-            <option value="normal">일반</option>
-            <option value="mini">미니</option>
-          </select>
-        </label>
+        <div className="staticField">
+          <span>네모닉</span>
+          <strong>576px</strong>
+        </div>
         <button className="primaryButton" disabled={busy} onClick={createPasses} type="button">
           {busy ? "처리중" : "생성"}
         </button>
