@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireRole } from "@/lib/auth";
+import { boothForAccount } from "@/lib/booth-access";
 import { clientFingerprint, hashFingerprint, randomId, verifyParticipantQrToken, verifyTempPassQrToken } from "@/lib/crypto";
 import { updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
@@ -26,10 +27,9 @@ export async function POST(request: NextRequest) {
       const actor = db.accounts.find((item) => item.id === current.account.id);
       if (!actor || actor.disabled) throw new HttpError(401, "계정을 찾을 수 없습니다.");
 
-      const boothId = actor.role === "superAdmin" ? body.boothId || actor.boothId : actor.boothId;
-      if (!boothId) throw new HttpError(403, "담당 부스가 없습니다.");
-
-      const booth = db.booths.find((item) => item.id === boothId);
+      const requestedBoothId = actor.role === "superAdmin" ? body.boothId || actor.boothId : body.boothId || actor.boothId;
+      if (!requestedBoothId) throw new HttpError(403, "담당 부스를 선택하세요.");
+      const booth = boothForAccount(actor, db, requestedBoothId);
       if (!booth || !booth.active) throw new HttpError(404, "부스를 찾을 수 없습니다.");
 
       const now = new Date().toISOString();

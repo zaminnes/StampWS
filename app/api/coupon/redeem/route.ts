@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     assertSameOrigin(request);
     assertContentLength(request, 4096);
-    const current = await requireRole(request, ["rewardAdmin", "superAdmin"]);
+    const current = await requireRole(request, ["boothAdmin", "rewardAdmin", "superAdmin"]);
     rateLimit(`coupon-redeem:${current.account.id}`, 80, 10 * 60 * 1000);
     const { ip, userAgent } = clientFingerprint(request.headers);
     const body = (await request.json()) as { token?: string; rewardId?: RewardId };
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       if (!actor || actor.disabled) throw new HttpError(401, "계정을 찾을 수 없습니다.");
 
       if (parsedTempPassToken) {
-        const rewardId = actor.role === "rewardAdmin" ? actor.rewardId : body.rewardId;
+        const rewardId = actor.role === "superAdmin" ? body.rewardId : actor.rewardId;
         if (!rewardId) throw new HttpError(403, "지급할 보상을 선택할 수 없습니다.");
 
         const reward = db.rewards.find((item) => item.id === rewardId && item.active);
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       const coupon = db.coupons.find((item) => item.id === parsedCouponToken.couponId);
       if (!coupon) throw new HttpError(404, "쿠폰을 찾을 수 없습니다.");
       if (coupon.status !== "unused") throw new HttpError(409, "이미 사용된 쿠폰입니다.");
-      if (actor.role === "rewardAdmin" && actor.rewardId !== coupon.rewardId) {
+      if (actor.role !== "superAdmin" && actor.rewardId !== coupon.rewardId) {
         throw new HttpError(403, "담당 보상 쿠폰만 사용할 수 있습니다.");
       }
 

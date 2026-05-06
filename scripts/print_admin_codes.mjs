@@ -15,22 +15,16 @@ function code(label) {
   return `${label}-${suffix}`;
 }
 
-const clubs = ["chemistry", "biology", "quasar", "alphago"];
-const rewardIds = ["chemistry", "biology", "quasar", "alphago"];
+const clubCodes = [
+  ["B-CHEM", "화학 통합"],
+  ["B-BIO", "생명 통합"],
+  ["B-QUASAR", "퀘이사 통합"],
+  ["B-ALPHAGO", "알파고 통합"]
+];
 
-console.log("Booth admin codes");
-for (let index = 1; index <= 40; index += 1) {
-  const label = `B-${String(index).padStart(2, "0")}`;
-  const club = clubs[Math.floor((index - 1) / 10)];
-  const boothNumber = String(((index - 1) % 10) + 1).padStart(2, "0");
-  console.log(`${label} ${club}_booth_${boothNumber} ${code(label)}`);
-}
-
-console.log("");
-console.log("Reward admin codes");
-for (let index = 1; index <= 8; index += 1) {
-  const label = `R-${String(index).padStart(2, "0")}`;
-  console.log(`${label} ${rewardIds[(index - 1) % rewardIds.length]} ${code(label)}`);
+console.log("Club integrated admin codes");
+for (const [label, name] of clubCodes) {
+  console.log(`${label} ${name} ${code(label)}`);
 }
 
 console.log("");

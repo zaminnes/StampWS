@@ -52,11 +52,11 @@ const REWARDS: RewardItem[] = [
 ];
 
 const CLUBS = [
-  { id: "chemistry", name: "Chemistry" },
-  { id: "biology", name: "Biology" },
-  { id: "quasar", name: "Quasar" },
-  { id: "alphago", name: "Alphago" }
-] as const;
+  { id: "chemistry", name: "화학", rewardId: "chemistry", codeLabel: "B-CHEM" },
+  { id: "biology", name: "생명", rewardId: "biology", codeLabel: "B-BIO" },
+  { id: "quasar", name: "퀘이사", rewardId: "quasar", codeLabel: "B-QUASAR" },
+  { id: "alphago", name: "알파고", rewardId: "alphago", codeLabel: "B-ALPHAGO" }
+] as const satisfies ReadonlyArray<{ id: string; name: string; rewardId: RewardId; codeLabel: string }>;
 
 const BOOTHS: Booth[] = CLUBS.flatMap((club) =>
   Array.from({ length: 10 }, (_, index) => {
@@ -133,6 +133,45 @@ function requireBootstrapEnvForFirestore() {
   }
 }
 
+async function buildAdminInviteCodes(now: string) {
+  const inviteCodes: AdminInviteCode[] = [];
+  const bootstrapLines: string[] = [];
+
+  for (const club of CLUBS) {
+    const rawCode = rawCodeForLabel(club.codeLabel);
+    const boothId = `${club.id}_booth_01`;
+    inviteCodes.push({
+      id: randomId("code"),
+      codeLabel: club.codeLabel,
+      codeHash: await hashToken(normalizeInviteCode(rawCode)),
+      role: "boothAdmin",
+      boothId,
+      rewardId: club.rewardId,
+      used: false,
+      revoked: false,
+      createdAt: now
+    });
+    bootstrapLines.push(`${club.codeLabel} clubAdmin ${club.name}: ${rawCode}`);
+  }
+
+  for (let index = 1; index <= 2; index += 1) {
+    const codeLabel = `S-${String(index).padStart(2, "0")}`;
+    const rawCode = rawCodeForLabel(codeLabel);
+    inviteCodes.push({
+      id: randomId("code"),
+      codeLabel,
+      codeHash: await hashToken(normalizeInviteCode(rawCode)),
+      role: "superAdmin",
+      used: false,
+      revoked: false,
+      createdAt: now
+    });
+    bootstrapLines.push(`${codeLabel} superAdmin: ${rawCode}`);
+  }
+
+  return { inviteCodes, bootstrapLines };
+}
+
 async function buildInitialDb() {
   requireBootstrapEnvForFirestore();
 
@@ -152,57 +191,8 @@ async function buildInitialDb() {
     "Admin invite codes"
   ];
 
-  const inviteCodes: AdminInviteCode[] = [];
-  const boothIds = BOOTHS.map((booth) => booth.id);
-  for (let index = 1; index <= 40; index += 1) {
-    const codeLabel = `B-${String(index).padStart(2, "0")}`;
-    const rawCode = rawCodeForLabel(codeLabel);
-    const boothId = boothIds[(index - 1) % boothIds.length];
-    inviteCodes.push({
-      id: randomId("code"),
-      codeLabel,
-      codeHash: await hashToken(normalizeInviteCode(rawCode)),
-      role: "boothAdmin",
-      boothId,
-      used: false,
-      revoked: false,
-      createdAt: now
-    });
-    bootstrapLines.push(`${codeLabel} boothAdmin ${boothId}: ${rawCode}`);
-  }
-
-  const rewardIds: RewardId[] = ["chemistry", "biology", "quasar", "alphago"];
-  for (let index = 1; index <= 8; index += 1) {
-    const codeLabel = `R-${String(index).padStart(2, "0")}`;
-    const rawCode = rawCodeForLabel(codeLabel);
-    const rewardId = rewardIds[(index - 1) % rewardIds.length];
-    inviteCodes.push({
-      id: randomId("code"),
-      codeLabel,
-      codeHash: await hashToken(normalizeInviteCode(rawCode)),
-      role: "rewardAdmin",
-      rewardId,
-      used: false,
-      revoked: false,
-      createdAt: now
-    });
-    bootstrapLines.push(`${codeLabel} rewardAdmin ${rewardId}: ${rawCode}`);
-  }
-
-  for (let index = 1; index <= 2; index += 1) {
-    const codeLabel = `S-${String(index).padStart(2, "0")}`;
-    const rawCode = rawCodeForLabel(codeLabel);
-    inviteCodes.push({
-      id: randomId("code"),
-      codeLabel,
-      codeHash: await hashToken(normalizeInviteCode(rawCode)),
-      role: "superAdmin",
-      used: false,
-      revoked: false,
-      createdAt: now
-    });
-    bootstrapLines.push(`${codeLabel} superAdmin: ${rawCode}`);
-  }
+  const { inviteCodes, bootstrapLines: inviteBootstrapLines } = await buildAdminInviteCodes(now);
+  bootstrapLines.push(...inviteBootstrapLines);
 
   const db: StampDb = {
     meta: { createdAt: now, updatedAt: now, version: 1 },
@@ -533,14 +523,12 @@ async function commitFirestoreDb(db: StampDb, snapshot: FirestoreSnapshot) {
   addCollectionWrites(writes, "nameChangeLogs", db.nameChangeLogs, snapshot.payloads.nameChangeLogs, snapshot.names.nameChangeLogs);
   addCollectionWrites(writes, "auditLogs", db.auditLogs, snapshot.payloads.auditLogs, snapshot.names.auditLogs);
 
-  if (writes.length > 450) {
-    throw new Error("한 번에 저장할 변경량이 너무 큽니다. 운영 전 컬렉션별 저장 로직으로 분리해야 합니다.");
+  for (let index = 0; index < writes.length; index += 400) {
+    await firestoreRequest(`${FIRESTORE_API}/projects/${getProjectId()}/databases/(default)/documents:commit`, {
+      method: "POST",
+      body: JSON.stringify({ writes: writes.slice(index, index + 400) })
+    });
   }
-
-  await firestoreRequest(`${FIRESTORE_API}/projects/${getProjectId()}/databases/(default)/documents:commit`, {
-    method: "POST",
-    body: JSON.stringify({ writes })
-  });
 }
 
 async function readFirestoreDb() {
@@ -610,6 +598,53 @@ export async function updateDb<T>(mutator: (db: StampDb) => T | Promise<T>) {
     () => undefined
   );
   return run;
+}
+
+export async function resetDbToClubSetup(actorAccountId: string, ipHash: string, userAgentHash: string) {
+  return updateDb(async (db) => {
+    const now = new Date().toISOString();
+    const superAccounts = db.accounts.filter((account) => account.role === "superAdmin");
+    const superAccountIds = new Set(superAccounts.map((account) => account.id));
+    const { inviteCodes } = await buildAdminInviteCodes(now);
+
+    db.meta = {
+      createdAt: db.meta.createdAt || now,
+      updatedAt: now,
+      version: (db.meta.version || 1) + 1
+    };
+    db.accounts = superAccounts;
+    db.sessions = db.sessions.filter((session) => superAccountIds.has(session.accountId) && !session.revoked);
+    db.adminInviteCodes = inviteCodes;
+    db.booths = BOOTHS.map((booth) => ({ ...booth, adminAccountIds: [] }));
+    db.rewards = REWARDS.map((reward) => ({ ...reward }));
+    db.stamps = [];
+    db.coupons = [];
+    db.tempPasses = [];
+    db.profiles = [];
+    db.userStats = [];
+    db.nameChangeLogs = [];
+    db.auditLogs = [
+      {
+        id: randomId("audit"),
+        actorAccountId,
+        action: "admin.database.reset",
+        createdAt: now,
+        ipHash,
+        userAgentHash,
+        metadata: {
+          preservedSuperAdmins: superAccounts.length,
+          clubInviteCodes: CLUBS.length,
+          superInviteCodes: 2
+        }
+      }
+    ];
+
+    return {
+      ok: true,
+      preservedSuperAdmins: superAccounts.length,
+      inviteCodeCount: inviteCodes.length
+    };
+  });
 }
 
 export function getBootstrapFilePath() {

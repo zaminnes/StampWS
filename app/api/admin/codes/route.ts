@@ -42,13 +42,14 @@ export async function GET(request: NextRequest) {
       const reward = code.rewardId ? db.rewards.find((item) => item.id === code.rewardId) : undefined;
       const usedBy = code.usedByAccountId ? db.accounts.find((item) => item.id === code.usedByAccountId) : undefined;
       const groupName = code.role === "superAdmin" ? "총괄" : groupLabel(booth?.clubName || reward?.clubName);
+      const integratedClubAdmin = code.role === "boothAdmin" && Boolean(code.rewardId);
 
       return {
         codeLabel: code.codeLabel,
         fullCode: isSuper ? rawCodeForLabel(code.codeLabel, seed) : undefined,
         groupName,
-        role: code.role,
-        targetName: booth?.name || reward?.name || "System",
+        role: integratedClubAdmin ? "통합" : code.role === "boothAdmin" ? "부스" : code.role === "rewardAdmin" ? "보상" : "총괄",
+        targetName: integratedClubAdmin ? `${groupName} 통합` : booth?.name || reward?.name || "System",
         used: code.used,
         usedAt: code.usedAt,
         revoked: code.revoked,

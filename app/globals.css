@@ -243,6 +243,23 @@ img {
   font-weight: 850;
 }
 
+.rewardRail small,
+.rewardChoice small,
+.rewardDetail,
+.rewardAdminCard small {
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.35;
+  margin: 0;
+  text-align: center;
+}
+
+.rewardDetail {
+  margin: 0 0 12px;
+  text-align: left;
+}
+
 .segmented,
 .tabBar {
   background: #f3f4f6;
@@ -350,6 +367,25 @@ textarea {
   font-weight: 850;
   min-height: 38px;
   padding: 8px 10px;
+}
+
+.fileScanButton {
+  align-items: center;
+  background: #f3f4f6;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: #374151;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 14px;
+}
+
+.fileScanButton input {
+  display: none;
 }
 
 .appShell {
@@ -953,6 +989,16 @@ textarea {
   width: 112px;
 }
 
+.boothScanCard {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+}
+
+.boothStampPreview {
+  margin-top: 0;
+}
+
 .scanPanel {
   display: grid;
   gap: 14px;
@@ -1120,6 +1166,10 @@ th {
   display: grid;
   gap: 5px;
   padding: 18px;
+}
+
+.dangerZone {
+  border-color: #fecaca;
 }
 
 .metricGrid strong,

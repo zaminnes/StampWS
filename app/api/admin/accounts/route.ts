@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 function accountTargetName(account: { boothId?: string; rewardId?: string }, db: Awaited<ReturnType<typeof readDb>>) {
   const booth = account.boothId ? db.booths.find((item) => item.id === account.boothId) : undefined;
   const reward = account.rewardId ? db.rewards.find((item) => item.id === account.rewardId) : undefined;
+  if (booth && reward) return `${reward.clubName} 통합`;
   return booth?.name || (reward ? `${reward.clubName} - ${reward.name}` : "-");
 }
 

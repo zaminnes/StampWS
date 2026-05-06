@@ -1,4 +1,5 @@
 import { createCouponQrToken, createParticipantQrToken, defaultStampDataUrl } from "./crypto";
+import { boothForAccount, managedBoothsForAccount } from "./booth-access";
 import type { Account, Profile, StampDb, UserStats } from "./types";
 
 export function accountView(account: Account) {
@@ -94,7 +95,8 @@ export async function buildMePayload(account: Account, db: StampDb) {
   }
 
   if (account.role === "boothAdmin") {
-    const booth = db.booths.find((item) => item.id === account.boothId);
+    const managedBooths = managedBoothsForAccount(account, db);
+    const booth = boothForAccount(account, db);
     return {
       ...base,
       booth: booth
@@ -104,7 +106,16 @@ export async function buildMePayload(account: Account, db: StampDb) {
             hasCustomStampImage: Boolean(booth.stampImageDataUrl)
           }
         : booth,
-      issuedCount: db.stamps.filter((stamp) => stamp.issuedByAdminId === account.id && !stamp.voided).length
+      managedBooths: managedBooths.map((item) => ({
+        ...item,
+        stampImageDataUrl: item.stampImageDataUrl || db.meta.defaultStampImageDataUrl || defaultStampDataUrl(item.name),
+        hasCustomStampImage: Boolean(item.stampImageDataUrl)
+      })),
+      reward: db.rewards.find((item) => item.id === account.rewardId),
+      issuedCount: db.stamps.filter((stamp) => stamp.issuedByAdminId === account.id && !stamp.voided).length,
+      redeemedCount:
+        db.coupons.filter((coupon) => coupon.redeemedByAccountId === account.id).length +
+        db.tempPasses.filter((pass) => pass.redeemedByAccountId === account.id).length
     };
   }
 

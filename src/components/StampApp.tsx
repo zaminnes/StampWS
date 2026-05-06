@@ -1,5 +1,6 @@
 "use client";
 
+import jsQR from "jsqr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Role = "participant" | "boothAdmin" | "rewardAdmin" | "superAdmin";
@@ -18,6 +19,16 @@ type Stamp = {
   boothName: string;
   stampImageDataUrl: string;
   createdAt: string;
+};
+
+type BoothView = {
+  id: string;
+  name: string;
+  clubName: string;
+  stampImageDataUrl?: string;
+  stampDesignUpdatedAt?: string;
+  hasCustomStampImage?: boolean;
+  active?: boolean;
 };
 
 type CodeRow = {
@@ -147,14 +158,8 @@ type MePayload = {
     redeemedAt?: string;
     qrToken: string;
   };
-  booth?: {
-    id: string;
-    name: string;
-    clubName: string;
-    stampImageDataUrl?: string;
-    stampDesignUpdatedAt?: string;
-    hasCustomStampImage?: boolean;
-  };
+  booth?: BoothView;
+  managedBooths?: BoothView[];
   reward?: Reward;
   issuedCount?: number;
   redeemedCount?: number;
@@ -181,11 +186,11 @@ type StampEffectState = {
   imageDataUrl?: string;
 };
 
-const REWARD_KO: Record<Reward["id"], { clubName: string; name: string }> = {
+const REWARD_KO: Record<Reward["id"], { clubName: string; name: string; detail?: string }> = {
   chemistry: { clubName: "화학", name: "달고나" },
   biology: { clubName: "생명", name: "콩가루차" },
   quasar: { clubName: "퀘이사", name: "팝콘" },
-  alphago: { clubName: "알파고", name: "아이스티" }
+  alphago: { clubName: "알파고", name: "아이스티", detail: "made by Automatic Ice-Tea Maker Machine" }
 };
 
 async function apiJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -248,6 +253,11 @@ function rewardNameById(rewardId?: Reward["id"]) {
   if (!rewardId) return "-";
   const label = REWARD_KO[rewardId];
   return label ? `${label.clubName} - ${label.name}` : rewardId;
+}
+
+function rewardDetail(rewardId?: Reward["id"]) {
+  if (!rewardId) return "";
+  return REWARD_KO[rewardId]?.detail || "";
 }
 
 function roleLabel(role?: Role) {
@@ -503,45 +513,79 @@ function Scanner({ label, onScan }: { label: string; onScan: (token: string) => 
     return () => stopCamera();
   }, [stopCamera]);
 
+  async function processToken(token: string) {
+    if (!token || busyRef.current) return;
+    busyRef.current = true;
+    try {
+      await onScan(token);
+      setMessage("처리 완료");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "처리 실패");
+    } finally {
+      window.setTimeout(() => {
+        busyRef.current = false;
+      }, 1200);
+    }
+  }
+
   async function startCamera() {
     setMessage("");
-    if (!("BarcodeDetector" in window)) {
-      setMessage("수동 입력 사용");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMessage("사진 스캔 사용");
       return;
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-    streamRef.current = stream;
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
+    try {
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+      }
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setActive(true);
+      setMessage("카메라 켜짐");
+    } catch {
+      setMessage("카메라 권한 확인");
     }
-    setActive(true);
   }
 
   useEffect(() => {
-    if (!active || !videoRef.current || !("BarcodeDetector" in window)) return;
+    if (!active || !videoRef.current) return;
     let cancelled = false;
-    const detector = new (window as unknown as { BarcodeDetector: new (options: { formats: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector({
-      formats: ["qr_code"]
-    });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
 
     async function tick() {
       if (cancelled || !videoRef.current) return;
       try {
-        const codes = await detector.detect(videoRef.current);
-        const token = extractQrToken(codes[0]?.rawValue || "");
-        if (token && !busyRef.current) {
-          busyRef.current = true;
-          await onScan(token);
-          setMessage("처리 완료");
-          setTimeout(() => {
-            busyRef.current = false;
-          }, 1200);
+        const video = videoRef.current;
+        if (context && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+          const scale = Math.min(1, 900 / video.videoWidth);
+          const width = Math.max(1, Math.floor(video.videoWidth * scale));
+          const height = Math.max(1, Math.floor(video.videoHeight * scale));
+          canvas.width = width;
+          canvas.height = height;
+          context.drawImage(video, 0, 0, width, height);
+          const imageData = context.getImageData(0, 0, width, height);
+          const code = jsQR(imageData.data, width, height, { inversionAttempts: "attemptBoth" });
+          const token = extractQrToken(code?.data || "");
+          await processToken(token);
         }
       } catch {
         setMessage("카메라 확인");
       }
-      window.setTimeout(tick, 500);
+      window.setTimeout(tick, 220);
     }
 
     tick();
@@ -552,9 +596,40 @@ function Scanner({ label, onScan }: { label: string; onScan: (token: string) => 
 
   async function submitManual() {
     if (!manual.trim()) return;
-    await onScan(extractQrToken(manual));
+    await processToken(extractQrToken(manual));
     setManual("");
-    setMessage("처리 완료");
+  }
+
+  async function scanImageFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || busyRef.current) return;
+    setMessage("");
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("이미지 읽기 실패"));
+        reader.readAsDataURL(file);
+      });
+      const image = await loadCanvasImage(dataUrl);
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("이미지 스캔 실패");
+      const scale = Math.min(1, 1400 / Math.max(image.naturalWidth, image.naturalHeight));
+      const width = Math.max(1, Math.floor(image.naturalWidth * scale));
+      const height = Math.max(1, Math.floor(image.naturalHeight * scale));
+      canvas.width = width;
+      canvas.height = height;
+      context.drawImage(image, 0, 0, width, height);
+      const imageData = context.getImageData(0, 0, width, height);
+      const code = jsQR(imageData.data, width, height, { inversionAttempts: "attemptBoth" });
+      const token = extractQrToken(code?.data || "");
+      if (!token) throw new Error("QR을 찾지 못했습니다.");
+      await processToken(token);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "사진 스캔 실패");
+    }
   }
 
   return (
@@ -568,6 +643,10 @@ function Scanner({ label, onScan }: { label: string; onScan: (token: string) => 
           <button className="secondaryButton" onClick={active ? stopCamera : startCamera} type="button">
             {active ? "끄기" : "카메라"}
           </button>
+          <label className="fileScanButton">
+            사진
+            <input accept="image/*" capture="environment" onChange={scanImageFile} type="file" />
+          </label>
         </div>
       </div>
       <video className="scannerVideo" ref={videoRef} muted playsInline />
@@ -688,7 +767,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
         {mode === "adminJoin" && (
           <label>
             관리자 가입번호
-            <input value={inviteCode} onChange={(event) => setInviteCode(event.target.value)} placeholder="B-01-..." />
+            <input value={inviteCode} onChange={(event) => setInviteCode(event.target.value)} placeholder="B-CHEM-..." />
           </label>
         )}
         {error && <p className="errorText">{error}</p>}
@@ -747,6 +826,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
             <div>
               <img src="/rewards/iced-tea.png" alt="알파고 아이스티" />
               <span>알파고 아이스티</span>
+              <small>Automatic Ice-Tea Maker</small>
             </div>
           </div>
         </section>
@@ -837,6 +917,7 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
           <div className="couponLayout">
             <div>
               <p className="couponTitle">{rewardLabel(couponReward)}</p>
+              {rewardDetail(couponReward?.id) && <p className="rewardDetail">{rewardDetail(couponReward?.id)}</p>}
               <p className={`pill ${me.coupon.status === "unused" ? "ok" : "done"}`}>
                 {me.coupon.status === "unused" ? "사용 가능" : `사용 완료 ${formatTime(me.coupon.redeemedAt)}`}
               </p>
@@ -855,6 +936,7 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
                 >
                   <img src={reward.imagePath} alt={reward.name} />
                   <span>{rewardLabel(reward)}</span>
+                  {rewardDetail(reward.id) && <small>{rewardDetail(reward.id)}</small>}
                 </button>
               ))}
             </div>
@@ -1021,15 +1103,31 @@ function RequiredNamePanel({ refresh }: { refresh: () => Promise<void> }) {
 function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
+  const managedBooths = useMemo(() => {
+    const booths = me.managedBooths?.length ? me.managedBooths : me.booth ? [me.booth] : [];
+    return booths.filter((booth) => booth.active !== false);
+  }, [me.booth, me.managedBooths]);
+  const [selectedBoothId, setSelectedBoothId] = useState("");
+  const selectedBooth = managedBooths.find((booth) => booth.id === selectedBoothId) || managedBooths[0];
   const [color, setColor] = useState("#ef4444");
   const [size, setSize] = useState(12);
   const [message, setMessage] = useState("");
   const [previewDataUrl, setPreviewDataUrl] = useState("");
-  const [boothName, setBoothName] = useState(me.booth?.name || "");
+  const [boothName, setBoothName] = useState("");
 
   useEffect(() => {
-    setBoothName(me.booth?.name || "");
-  }, [me.booth?.name]);
+    if (!managedBooths.length) {
+      setSelectedBoothId("");
+      return;
+    }
+    if (!managedBooths.some((booth) => booth.id === selectedBoothId)) {
+      setSelectedBoothId(managedBooths[0].id);
+    }
+  }, [managedBooths, selectedBoothId]);
+
+  useEffect(() => {
+    setBoothName(selectedBooth?.name || "");
+  }, [selectedBooth?.id, selectedBooth?.name]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1038,17 +1136,17 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
     if (!context) return;
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, canvas.width, canvas.height);
-    if (me.booth?.stampImageDataUrl) {
+    if (selectedBooth?.stampImageDataUrl) {
       const image = new Image();
       image.onload = () => {
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
         setPreviewDataUrl(canvas.toDataURL("image/png"));
       };
-      image.src = me.booth.stampImageDataUrl;
+      image.src = selectedBooth.stampImageDataUrl;
     } else {
       setPreviewDataUrl(canvas.toDataURL("image/png"));
     }
-  }, [me.booth?.stampImageDataUrl]);
+  }, [selectedBooth?.id, selectedBooth?.stampImageDataUrl]);
 
   function point(event: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
@@ -1105,11 +1203,11 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
   async function saveStamp() {
     setMessage("");
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !selectedBooth) return;
     try {
       await apiJson("/api/booth/save-stamp", {
         method: "POST",
-        body: JSON.stringify({ imageDataUrl: canvas.toDataURL("image/png") })
+        body: JSON.stringify({ boothId: selectedBooth.id, imageDataUrl: canvas.toDataURL("image/png") })
       });
       await refresh();
       setMessage("저장됨");
@@ -1120,10 +1218,11 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
 
   async function saveBoothName() {
     setMessage("");
+    if (!selectedBooth) return;
     try {
       await apiJson("/api/admin/booths", {
         method: "PATCH",
-        body: JSON.stringify({ name: boothName })
+        body: JSON.stringify({ boothId: selectedBooth.id, name: boothName })
       });
       await refresh();
       setMessage("부스명 저장");
@@ -1137,15 +1236,23 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
       <div className="sectionHeader">
         <div>
           <h2>도장</h2>
-          <p>{me.booth?.name}</p>
+          <p>{selectedBooth ? `${selectedBooth.clubName} · ${selectedBooth.name}` : "부스 없음"}</p>
         </div>
       </div>
       <div className="canvasTools">
         <label>
+          부스
+          <select value={selectedBooth?.id || ""} onChange={(event) => setSelectedBoothId(event.target.value)}>
+            {managedBooths.map((booth) => (
+              <option key={booth.id} value={booth.id}>{booth.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
           부스명
           <input value={boothName} onChange={(event) => setBoothName(event.target.value)} maxLength={28} />
         </label>
-        <button className="secondaryButton" onClick={saveBoothName} type="button">저장</button>
+        <button className="secondaryButton" disabled={!selectedBooth} onClick={saveBoothName} type="button">저장</button>
       </div>
       <div className="canvasTools">
         <label>
@@ -1173,8 +1280,59 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
         {previewDataUrl ? <img src={previewDataUrl} alt="도장 미리보기" /> : <strong>STAMP</strong>}
       </div>
       {message && <p className={message.includes("저장") && !message.includes("실패") ? "statusText" : "errorText"}>{message}</p>}
-      <button className="primaryButton" onClick={saveStamp} type="button">저장</button>
+      <button className="primaryButton" disabled={!selectedBooth} onClick={saveStamp} type="button">저장</button>
     </section>
+  );
+}
+
+function BoothScanPanel({ me, onScan }: { me: MePayload; onScan: (token: string, booth: BoothView) => Promise<void> }) {
+  const managedBooths = useMemo(() => {
+    const booths = me.managedBooths?.length ? me.managedBooths : me.booth ? [me.booth] : [];
+    return booths.filter((booth) => booth.active !== false);
+  }, [me.booth, me.managedBooths]);
+  const [selectedBoothId, setSelectedBoothId] = useState("");
+  const selectedBooth = managedBooths.find((booth) => booth.id === selectedBoothId) || managedBooths[0];
+
+  useEffect(() => {
+    if (!managedBooths.length) {
+      setSelectedBoothId("");
+      return;
+    }
+    if (!managedBooths.some((booth) => booth.id === selectedBoothId)) {
+      setSelectedBoothId(managedBooths[0].id);
+    }
+  }, [managedBooths, selectedBoothId]);
+
+  return (
+    <div className="gridTwo">
+      <section className="panel boothScanCard">
+        <div className="sectionHeader">
+          <div>
+            <h2>부스</h2>
+            <p>{selectedBooth ? selectedBooth.clubName : "선택 필요"}</p>
+          </div>
+        </div>
+        <label>
+          지급 부스
+          <select value={selectedBooth?.id || ""} onChange={(event) => setSelectedBoothId(event.target.value)}>
+            {managedBooths.map((booth) => (
+              <option key={booth.id} value={booth.id}>{booth.name}</option>
+            ))}
+          </select>
+        </label>
+        <div className="stampPreview boothStampPreview">
+          <span>지급 도장</span>
+          {selectedBooth?.stampImageDataUrl ? <img src={selectedBooth.stampImageDataUrl} alt={`${selectedBooth.name} 도장`} /> : <strong>STAMP</strong>}
+        </div>
+      </section>
+      <Scanner
+        label="QR 지급"
+        onScan={async (token) => {
+          if (!selectedBooth) throw new Error("부스를 선택하세요.");
+          await onScan(token, selectedBooth);
+        }}
+      />
+    </div>
   );
 }
 
@@ -1685,6 +1843,50 @@ function AccountAdminPanel() {
   );
 }
 
+function DatabaseResetPanel({ refresh }: { refresh: () => Promise<void> }) {
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function resetDatabase() {
+    const confirm = window.prompt("초기화하려면 RESET을 입력하세요.");
+    if (confirm === null) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await apiJson<{ preservedSuperAdmins: number; inviteCodeCount: number }>("/api/admin/reset", {
+        method: "POST",
+        body: JSON.stringify({ confirm })
+      });
+      await refresh();
+      setMessage(`초기화 완료 · 총괄 ${result.preservedSuperAdmins} · 코드 ${result.inviteCodeCount}`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "초기화 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel dangerZone">
+      <div className="sectionHeader">
+        <div>
+          <h2>DB 리셋</h2>
+          <p>총괄만 유지.</p>
+        </div>
+      </div>
+      <div className="summaryRows">
+        <div><span>동아리 계정</span><strong>4개 코드</strong></div>
+        <div><span>총괄 코드</span><strong>2개 유지</strong></div>
+        <div><span>참가 기록</span><strong>전체 삭제</strong></div>
+      </div>
+      {message && <p className={message.includes("완료") ? "statusText" : "errorText"}>{message}</p>}
+      <button className="dangerButton" disabled={busy} onClick={resetDatabase} type="button">
+        {busy ? "처리중" : "초기화"}
+      </button>
+    </section>
+  );
+}
+
 function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
   return (
     <div className="gridTwo adminGrid">
@@ -1707,6 +1909,7 @@ function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<voi
       <DefaultStampPanel me={me} refresh={refresh} />
       <AccountAdminPanel />
       <BoothNamesPanel me={me} refresh={refresh} />
+      <DatabaseResetPanel refresh={refresh} />
     </div>
   );
 }
@@ -1820,6 +2023,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
     ] as Array<[AppTab, string]>;
     if (role === "boothAdmin") return [
       ["boothScan", "지급"],
+      ["rewardScan", "사용"],
       ["stampStudio", "도장"],
       ["codes", "코드"],
       ["leaderboard", "랭킹"]
@@ -1846,25 +2050,25 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
     setTab("home");
   }
 
-  const handleStampScan = useCallback(async (token: string) => {
+  const handleStampScan = useCallback(async (token: string, booth: BoothView) => {
     setToast("");
     try {
       const result = await apiJson<{ participantName: string; stampCount: number }>("/api/booth/grant-stamp", {
         method: "POST",
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ token, boothId: booth.id })
       });
       setToast(`${result.participantName} 스탬프 지급 완료 (${result.stampCount}/7)`);
       showStampEffect({
         mode: "give",
         title: "지급 완료",
         detail: `${result.participantName} · ${result.stampCount}/7`,
-        imageDataUrl: me.booth?.stampImageDataUrl
+        imageDataUrl: booth.stampImageDataUrl
       });
       await refresh();
     } catch (err) {
       setToast(err instanceof Error ? err.message : "스탬프 지급 실패");
     }
-  }, [me.booth?.stampImageDataUrl, refresh, showStampEffect]);
+  }, [refresh, showStampEffect]);
 
   const handleCouponScan = useCallback(async (token: string) => {
     setToast("");
@@ -1919,13 +2123,14 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       {!(role === "participant" && me.account.displayNameRequired) && tab === "profile" && <ProfileEditor me={me} refresh={refresh} />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "leaderboard" && <Leaderboard />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "stampStudio" && <StampStudio me={me} refresh={refresh} />}
-      {!(role === "participant" && me.account.displayNameRequired) && tab === "boothScan" && <Scanner label="QR 지급" onScan={handleStampScan} />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "boothScan" && <BoothScanPanel me={me} onScan={handleStampScan} />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "tempPasses" && role === "superAdmin" && <TempPassPanel />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "rewardScan" && (
         <div className="gridTwo">
           <section className="panel rewardAdminCard">
             <h2>보상</h2>
             <p>{rewardLabel(rewards.find((reward) => reward.id === me.account?.rewardId))}</p>
+            {rewardDetail(me.account?.rewardId) && <small>{rewardDetail(me.account?.rewardId)}</small>}
             <strong>{me.redeemedCount || 0}</strong>
             <span>사용</span>
           </section>

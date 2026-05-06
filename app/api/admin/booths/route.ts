@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireRole } from "@/lib/auth";
+import { boothForAccount } from "@/lib/booth-access";
 import { clientFingerprint, hashFingerprint, randomId } from "@/lib/crypto";
 import { updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
@@ -25,11 +26,14 @@ export async function PATCH(request: NextRequest) {
     const { ip, userAgent } = clientFingerprint(request.headers);
     const body = (await request.json()) as { boothId?: string; name?: string };
     const name = sanitizeBoothName(body.name || "");
-    const boothId = current.account.role === "boothAdmin" ? current.account.boothId : body.boothId;
-    if (!boothId) throw new HttpError(400, "부스를 선택하세요.");
+    if (!body.boothId && current.account.role === "superAdmin") throw new HttpError(400, "부스를 선택하세요.");
 
     await updateDb(async (db) => {
-      const booth = db.booths.find((item) => item.id === boothId);
+      const actor = db.accounts.find((item) => item.id === current.account.id);
+      if (!actor || actor.disabled) throw new HttpError(401, "계정을 찾을 수 없습니다.");
+      const booth = actor.role === "superAdmin"
+        ? db.booths.find((item) => item.id === body.boothId)
+        : boothForAccount(actor, db, body.boothId || actor.boothId);
       if (!booth) throw new HttpError(404, "부스를 찾을 수 없습니다.");
       const oldName = booth.name;
       booth.name = name;

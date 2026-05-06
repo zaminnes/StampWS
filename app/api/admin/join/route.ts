@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createSession, setSessionCookie } from "@/lib/auth";
+import { clubIdFromBoothId } from "@/lib/booth-access";
 import {
   clientFingerprint,
   hashFingerprint,
@@ -67,9 +68,12 @@ export async function POST(request: NextRequest) {
       invite.usedAt = now;
 
       if (invite.boothId) {
-        const booth = db.booths.find((item) => item.id === invite.boothId);
-        if (booth && !booth.adminAccountIds.includes(newAccount.id)) {
-          booth.adminAccountIds.push(newAccount.id);
+        const clubId = clubIdFromBoothId(invite.boothId);
+        const booths = db.booths.filter((item) => clubIdFromBoothId(item.id) === clubId);
+        for (const booth of booths) {
+          if (!booth.adminAccountIds.includes(newAccount.id)) {
+            booth.adminAccountIds.push(newAccount.id);
+          }
         }
       }
 

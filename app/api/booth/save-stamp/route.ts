@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireRole } from "@/lib/auth";
+import { boothForAccount } from "@/lib/booth-access";
 import { clientFingerprint, hashFingerprint, randomId } from "@/lib/crypto";
 import { updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
@@ -15,13 +16,13 @@ export async function POST(request: NextRequest) {
     const current = await requireRole(request, ["boothAdmin"]);
     rateLimit(`stamp-design:${current.account.id}`, 20, 10 * 60 * 1000);
     const { ip, userAgent } = clientFingerprint(request.headers);
-    const body = (await request.json()) as { imageDataUrl?: string };
+    const body = (await request.json()) as { boothId?: string; imageDataUrl?: string };
     const imageDataUrl = validateStampImage(body.imageDataUrl || "");
 
     await updateDb(async (db) => {
       const account = db.accounts.find((item) => item.id === current.account.id);
-      if (!account?.boothId) throw new HttpError(403, "담당 부스가 없습니다.");
-      const booth = db.booths.find((item) => item.id === account.boothId);
+      if (!account) throw new HttpError(401, "계정을 찾을 수 없습니다.");
+      const booth = boothForAccount(account, db, body.boothId || account.boothId);
       if (!booth || !booth.active) throw new HttpError(404, "부스를 찾을 수 없습니다.");
 
       const now = new Date().toISOString();
