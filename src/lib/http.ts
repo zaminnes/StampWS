@@ -23,15 +23,85 @@ export function jsonError(error: unknown) {
   return NextResponse.json({ error: "요청을 처리하지 못했습니다." }, { status: 400 });
 }
 
+function parseHost(host: string, protocol = "https:") {
+  const parsed = new URL(`${protocol}//${host}`);
+  const defaultPort = protocol === "https:" ? "443" : "80";
+  const port = parsed.port || defaultPort;
+  return {
+    hostname: parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase(),
+    port,
+    value: `${parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase()}${port === defaultPort ? "" : `:${port}`}`
+  };
+}
+
+function isLocalHost(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function forwardedHostCandidates(request: NextRequest, protocol: string) {
+  const candidates = new Set<string>();
+  const addHost = (value?: string | null) => {
+    if (!value) return;
+    for (const part of value.split(",")) {
+      const host = part.trim();
+      if (!host) continue;
+      try {
+        candidates.add(parseHost(host, protocol).value);
+      } catch {
+        continue;
+      }
+    }
+  };
+
+  addHost(request.headers.get("host"));
+  addHost(request.headers.get("x-forwarded-host"));
+  addHost(request.headers.get("x-original-host"));
+  addHost(request.nextUrl.host);
+
+  const forwarded = request.headers.get("forwarded") || "";
+  const match = /host="?([^;,"]+)/i.exec(forwarded);
+  addHost(match?.[1]);
+
+  return candidates;
+}
+
+function allowedOrigins() {
+  return (process.env.STAMP_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map((origin) => {
+      try {
+        const parsed = origin.includes("://") ? new URL(origin) : new URL(`https://${origin}`);
+        return `${parsed.protocol}//${parseHost(parsed.host, parsed.protocol).value}`;
+      } catch {
+        return "";
+      }
+    })
+    .filter(Boolean);
+}
+
+function isAllowedLocalOrigin(origin: URL, host: string) {
+  if (process.env.NODE_ENV === "production") return false;
+  const originHost = {
+    hostname: origin.hostname.replace(/^\[|\]$/g, "").toLowerCase(),
+    port: origin.port || (origin.protocol === "https:" ? "443" : "80")
+  };
+  const requestHost = parseHost(host, origin.protocol);
+  return isLocalHost(originHost.hostname) && isLocalHost(requestHost.hostname) && originHost.port === requestHost.port;
+}
+
 export function assertSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
   if (!origin) return;
 
-  const host = request.headers.get("host");
-  if (!host) throw new HttpError(403, "요청 출처를 확인할 수 없습니다.");
-
   try {
-    if (new URL(origin).host !== host) {
+    const originUrl = new URL(origin);
+    const originHost = parseHost(originUrl.host, originUrl.protocol);
+    const originValue = `${originUrl.protocol}//${originHost.value}`;
+    const hostCandidates = forwardedHostCandidates(request, originUrl.protocol);
+    const hasLocalCandidate = [...hostCandidates].some((host) => isAllowedLocalOrigin(originUrl, host));
+    if (!hostCandidates.has(originHost.value) && !hasLocalCandidate && !allowedOrigins().includes(originValue)) {
       throw new HttpError(403, "다른 사이트에서 보낸 요청은 차단됩니다.");
     }
   } catch (error) {

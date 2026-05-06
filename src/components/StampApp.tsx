@@ -475,8 +475,8 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
         </div>
         <div className="segmented">
           <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">로그인</button>
-          <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">참가자</button>
-          <button className={mode === "adminJoin" ? "active" : ""} onClick={() => setMode("adminJoin")} type="button">관리자</button>
+          <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">참가자 가입</button>
+          <button className={mode === "adminJoin" ? "active" : ""} onClick={() => setMode("adminJoin")} type="button">관리자 가입</button>
         </div>
         <label>
           아이디
