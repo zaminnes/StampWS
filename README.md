@@ -81,6 +81,8 @@ ADMIN_CODE_SEED
 BOOTSTRAP_SUPERADMIN_PASSWORD
 ```
 
+`BOOTSTRAP_SUPERADMIN_PASSWORD` must be at least 12 characters. Prefer the generated value.
+
 After setting `ADMIN_CODE_SEED` locally, print the deterministic admin invite codes:
 
 ```bash

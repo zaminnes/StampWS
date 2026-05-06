@@ -9,7 +9,7 @@ function secret(bytes = 32) {
 const values = {
   APP_SECRET: secret(48),
   ADMIN_CODE_SEED: secret(32),
-  BOOTSTRAP_SUPERADMIN_PASSWORD: secret(10)
+  BOOTSTRAP_SUPERADMIN_PASSWORD: secret(18)
 };
 
 if (process.argv.includes("--write")) {

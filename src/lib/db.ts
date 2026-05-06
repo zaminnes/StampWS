@@ -128,8 +128,8 @@ function requireBootstrapEnvForFirestore() {
   if (!process.env.ADMIN_CODE_SEED || process.env.ADMIN_CODE_SEED.length < 16) {
     throw new Error("Firebase App Hosting에서는 ADMIN_CODE_SEED secret이 필요합니다.");
   }
-  if (!process.env.BOOTSTRAP_SUPERADMIN_PASSWORD || process.env.BOOTSTRAP_SUPERADMIN_PASSWORD.length < 8) {
-    throw new Error("Firebase App Hosting에서는 BOOTSTRAP_SUPERADMIN_PASSWORD secret이 필요합니다.");
+  if (!process.env.BOOTSTRAP_SUPERADMIN_PASSWORD || process.env.BOOTSTRAP_SUPERADMIN_PASSWORD.length < 12) {
+    throw new Error("Firebase App Hosting에서는 12자 이상의 BOOTSTRAP_SUPERADMIN_PASSWORD secret이 필요합니다.");
   }
 }
 

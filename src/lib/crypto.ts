@@ -40,8 +40,8 @@ export function validateLoginId(loginId: string) {
 }
 
 export function validatePassword(password: string) {
-  if (typeof password !== "string" || password.length < 6 || password.length > 128) {
-    throw new Error("비밀번호는 6~128자로 입력하세요.");
+  if (typeof password !== "string" || password.length < 8 || password.length > 128) {
+    throw new Error("비밀번호는 8~128자로 입력하세요.");
   }
 }
 
