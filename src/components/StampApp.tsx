@@ -96,8 +96,7 @@ type BluetoothDevice = {
 type BluetoothNavigator = Navigator & {
   bluetooth?: {
     requestDevice: (options: {
-      filters?: Array<{ namePrefix: string }>;
-      acceptAllDevices?: boolean;
+      filters: Array<{ namePrefix: string }>;
       optionalServices: string[];
     }) => Promise<BluetoothDevice>;
   };
@@ -265,10 +264,13 @@ const PRINTER_WIDTHS: Record<PrinterType, number> = {
 };
 
 const PRINTER_SERVICES = [
-  { service: "00005000-d102-11e1-9b23-74f07d000000", write: "00005001-d102-11e1-9b23-74f07d000000" },
-  { service: "3b790000-923e-4f69-b794-74f07d000000", write: "3b790002-923e-4f69-b794-74f07d000000" },
-  { service: "49535343-fe78-4ae5-8fa9-9fafd205e455", write: "49535343-8841-43f4-a8d4-ecbe34729bb3" }
+  { svc: "00005000-d102-11e1-9b23-74f07d000000", write: "00005001-d102-11e1-9b23-74f07d000000", name: "NEMONIC" },
+  { svc: "3b790000-923e-4f69-b794-74f07d000000", write: "3b790002-923e-4f69-b794-74f07d000000", name: "MIP201" },
+  { svc: "49535343-fe78-4ae5-8fa9-9fafd205e455", write: "49535343-8841-43f4-a8d4-ecbe34729bb3", name: "MIP301" }
 ];
+
+let nemonicPrinterConnected = false;
+let nemonicWriteCharacteristic: BluetoothWriteCharacteristic | null = null;
 
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -326,74 +328,58 @@ async function renderTempPassCanvas(pass: TempPassView, printerType: PrinterType
   return canvas;
 }
 
-function canvasToPrinterBitmap(canvas: HTMLCanvasElement) {
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("인쇄 데이터를 만들지 못했습니다.");
-  const { width, height } = canvas;
+function toBW(context: CanvasRenderingContext2D, width: number, height: number) {
   const imageData = context.getImageData(0, 0, width, height);
-  const bytesPerLine = Math.ceil(width / 8);
-  const bitmap = new Uint8Array(bytesPerLine * height);
-
+  const pixels = imageData.data;
+  const bw: number[][] = [];
   for (let y = 0; y < height; y += 1) {
+    const row: number[] = [];
     for (let x = 0; x < width; x += 1) {
       const index = (y * width + x) * 4;
-      const alpha = imageData.data[index + 3] / 255;
-      const red = Math.round(imageData.data[index] * alpha + 255 * (1 - alpha));
-      const green = Math.round(imageData.data[index + 1] * alpha + 255 * (1 - alpha));
-      const blue = Math.round(imageData.data[index + 2] * alpha + 255 * (1 - alpha));
-      const gray = Math.round(red * 0.299 + green * 0.587 + blue * 0.114);
-      if (gray < 128) {
-        bitmap[y * bytesPerLine + Math.floor(x / 8)] |= 1 << (7 - (x % 8));
+      const r = pixels[index];
+      const g = pixels[index + 1];
+      const b = pixels[index + 2];
+      const a = pixels[index + 3];
+      let rr = r;
+      let gg = g;
+      let bb = b;
+      if (a < 255) {
+        const alpha = a / 255;
+        rr = Math.round(r * alpha + 255 * (1 - alpha));
+        gg = Math.round(g * alpha + 255 * (1 - alpha));
+        bb = Math.round(b * alpha + 255 * (1 - alpha));
       }
+      const gray = Math.round(rr * 0.299 + gg * 0.587 + bb * 0.114);
+      row.push(gray < 128 ? 1 : 0);
     }
+    bw.push(row);
   }
-
-  const header = new Uint8Array([
-    0x1d,
-    0x76,
-    0x30,
-    0x00,
-    bytesPerLine & 0xff,
-    (bytesPerLine >> 8) & 0xff,
-    height & 0xff,
-    (height >> 8) & 0xff
-  ]);
-  const packet = new Uint8Array(header.length + bitmap.length);
-  packet.set(header, 0);
-  packet.set(bitmap, header.length);
-  return packet;
+  return bw;
 }
 
-async function writePrinter(characteristic: BluetoothWriteCharacteristic, data: Uint8Array) {
-  if (characteristic.writeValueWithoutResponse) {
-    try {
-      await characteristic.writeValueWithoutResponse(data);
-      return;
-    } catch {
-      if (!characteristic.writeValue) throw new Error("프린터 전송에 실패했습니다.");
-    }
+async function sendCmd(characteristic: BluetoothWriteCharacteristic, bytes: number[]) {
+  const data = new Uint8Array(bytes);
+  try {
+    await characteristic.writeValueWithoutResponse!(data);
+  } catch {
+    await characteristic.writeValue?.(data);
   }
-  if (characteristic.writeValue) {
-    await characteristic.writeValue(data);
-    return;
-  }
-  throw new Error("프린터 쓰기 기능을 찾지 못했습니다.");
 }
 
-async function sendPrinterData(characteristic: BluetoothWriteCharacteristic, data: Uint8Array, onProgress: (progress: number) => void, progressBase: number, progressScale: number) {
-  const chunkSize = 100;
+async function sendDataMTU(characteristic: BluetoothWriteCharacteristic, data: Uint8Array, onProgress: (progress: number) => void, progressBase = 0, progressScale = 90) {
+  const CHUNK_SIZE = 100;
   let sentBytes = 0;
-  for (let offset = 0; offset < data.length; offset += chunkSize) {
-    const chunk = data.slice(offset, Math.min(offset + chunkSize, data.length));
+  for (let index = 0; index < data.length; index += CHUNK_SIZE) {
+    const chunk = data.slice(index, Math.min(index + CHUNK_SIZE, data.length));
     let retries = 0;
     while (retries < 10) {
       try {
-        await writePrinter(characteristic, chunk);
+        await characteristic.writeValueWithoutResponse!(chunk);
         sentBytes += chunk.length;
         break;
       } catch {
         retries += 1;
-        if (retries >= 10) throw new Error(`BLE 전송 실패: ${offset}`);
+        if (retries >= 10) throw new Error(`BLE 전송 실패 at ${index}`);
         await delay(20 * retries);
       }
     }
@@ -402,58 +388,89 @@ async function sendPrinterData(characteristic: BluetoothWriteCharacteristic, dat
   }
 }
 
-async function connectNemonicPrinter() {
-  const bluetooth = (navigator as BluetoothNavigator).bluetooth;
-  if (!window.isSecureContext) {
-    throw new Error("네모닉 인쇄는 HTTPS 또는 localhost에서만 가능합니다.");
-  }
-  if (!bluetooth) {
-    throw new Error("PC Chrome 또는 Edge에서 열고 블루투스를 켜주세요.");
-  }
+async function sendToPrinter(characteristic: BluetoothWriteCharacteristic, bwData: number[][], onProgress: (progress: number) => void, progressBase = 0, progressScale = 90) {
+  const height = bwData.length;
+  const width = bwData[0].length;
+  const bytesPerLine = Math.ceil(width / 8);
 
-  const device = await bluetooth.requestDevice({
-    filters: [{ namePrefix: "nemonic" }, { namePrefix: "Nemonic" }],
-    optionalServices: PRINTER_SERVICES.map((item) => item.service)
-  });
-  device.addEventListener?.("gattserverdisconnected", () => undefined);
-  const server = await device.gatt?.connect();
-  if (!server) throw new Error("프린터 연결에 실패했습니다.");
-
-  for (const item of PRINTER_SERVICES) {
-    try {
-      const service = await server.getPrimaryService(item.service);
-      return await service.getCharacteristic(item.write);
-    } catch {
-      continue;
+  const bitmap = new Uint8Array(bytesPerLine * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (bwData[y][x] === 1) {
+        const byteIndex = y * bytesPerLine + Math.floor(x / 8);
+        const bitIndex = 7 - (x % 8);
+        bitmap[byteIndex] |= 1 << bitIndex;
+      }
     }
   }
 
-  throw new Error("네모닉 프린터 서비스를 찾지 못했습니다.");
+  const header = new Uint8Array([0x1d, 0x76, 0x30, 0x00, bytesPerLine & 0xff, (bytesPerLine >> 8) & 0xff, height & 0xff, (height >> 8) & 0xff]);
+  const packet = new Uint8Array(header.length + bitmap.length);
+  packet.set(header, 0);
+  packet.set(bitmap, header.length);
+
+  await sendDataMTU(characteristic, packet, onProgress, progressBase, progressScale);
+  await delay(500);
+  await sendCmd(characteristic, [0x1b, 0x50]);
+}
+
+async function connectNemonicPrinter() {
+  const bluetooth = (navigator as BluetoothNavigator).bluetooth;
+  if (!bluetooth) {
+    throw new Error("이 브라우저에서는 블루투스 프린터를 지원하지 않습니다.\n\nChrome, Edge 또는 Opera 브라우저를 사용해주세요.");
+  }
+
+  try {
+    const device = await bluetooth.requestDevice({
+      filters: [{ namePrefix: "nemonic" }],
+      optionalServices: PRINTER_SERVICES.map((item) => item.svc)
+    });
+    device.addEventListener?.("gattserverdisconnected", () => {
+      nemonicPrinterConnected = false;
+      nemonicWriteCharacteristic = null;
+    });
+    const server = await device.gatt?.connect();
+    if (!server) throw new Error("프린터 연결에 실패했습니다.");
+    for (const serviceInfo of PRINTER_SERVICES) {
+      try {
+        const service = await server.getPrimaryService(serviceInfo.svc);
+        nemonicWriteCharacteristic = await service.getCharacteristic(serviceInfo.write);
+        nemonicPrinterConnected = true;
+        return nemonicWriteCharacteristic;
+      } catch {
+      }
+    }
+    throw new Error("서비스 없음");
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") {
+      throw new Error("프린터 선택이 취소되었습니다.");
+    }
+    throw error;
+  }
 }
 
 async function printTempPasses(passes: TempPassView[], printerType: PrinterType, onProgress: (progress: number) => void) {
   const printable = passes.filter((pass) => pass.status === "active" && pass.qrToken);
   if (printable.length === 0) throw new Error("인쇄할 임시 QR이 없습니다.");
 
-  onProgress(5);
-  const characteristic = await connectNemonicPrinter();
-  onProgress(12);
-  await writePrinter(characteristic, new Uint8Array([0x1b, 0x40]));
+  const characteristic = nemonicPrinterConnected && nemonicWriteCharacteristic ? nemonicWriteCharacteristic : await connectNemonicPrinter();
+  onProgress(0);
+  await sendCmd(characteristic, [0x1b, 0x40]);
   await delay(200);
 
   for (const [index, pass] of printable.entries()) {
     const canvas = await renderTempPassCanvas(pass, printerType);
-    const packet = canvasToPrinterBitmap(canvas);
-    const progressBase = 12 + Math.round((index / printable.length) * 80);
-    const progressScale = Math.max(1, Math.round(80 / printable.length));
-    await sendPrinterData(characteristic, packet, onProgress, progressBase, progressScale);
-    await delay(500);
-    await writePrinter(characteristic, new Uint8Array([0x1b, 0x50]));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("인쇄 캔버스를 읽지 못했습니다.");
+    const bwData = toBW(context, canvas.width, canvas.height);
+    const progressBase = Math.round((index / printable.length) * 90);
+    const progressScale = Math.max(1, Math.round(90 / printable.length));
+    await sendToPrinter(characteristic, bwData, onProgress, progressBase, progressScale);
     await delay(Math.max(2000, canvas.height * 10));
-    await writePrinter(characteristic, new Uint8Array([0x1b, 0x69]));
+    await sendCmd(characteristic, [0x1b, 0x69]);
     await delay(1000);
-    onProgress(12 + Math.round(((index + 1) / printable.length) * 88));
   }
+  onProgress(100);
 }
 
 function QrImage({ token, label }: { token: string; label: string }) {
@@ -1023,6 +1040,11 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
   const [size, setSize] = useState(12);
   const [message, setMessage] = useState("");
   const [previewDataUrl, setPreviewDataUrl] = useState("");
+  const [boothName, setBoothName] = useState(me.booth?.name || "");
+
+  useEffect(() => {
+    setBoothName(me.booth?.name || "");
+  }, [me.booth?.name]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1111,6 +1133,20 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
     }
   }
 
+  async function saveBoothName() {
+    setMessage("");
+    try {
+      await apiJson("/api/admin/booths", {
+        method: "PATCH",
+        body: JSON.stringify({ name: boothName })
+      });
+      await refresh();
+      setMessage("부스명 저장");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "저장 실패");
+    }
+  }
+
   return (
     <section className="panel">
       <div className="sectionHeader">
@@ -1118,6 +1154,13 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
           <h2>도장</h2>
           <p>{me.booth?.name}</p>
         </div>
+      </div>
+      <div className="canvasTools">
+        <label>
+          부스명
+          <input value={boothName} onChange={(event) => setBoothName(event.target.value)} maxLength={28} />
+        </label>
+        <button className="secondaryButton" onClick={saveBoothName} type="button">저장</button>
       </div>
       <div className="canvasTools">
         <label>
@@ -1144,7 +1187,7 @@ function StampStudio({ me, refresh }: { me: MePayload; refresh: () => Promise<vo
         <span>미리보기</span>
         {previewDataUrl ? <img src={previewDataUrl} alt="도장 미리보기" /> : <strong>STAMP</strong>}
       </div>
-      {message && <p className={message.includes("저장됨") ? "statusText" : "errorText"}>{message}</p>}
+      {message && <p className={message.includes("저장") && !message.includes("실패") ? "statusText" : "errorText"}>{message}</p>}
       <button className="primaryButton" onClick={saveStamp} type="button">저장</button>
     </section>
   );

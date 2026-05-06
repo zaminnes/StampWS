@@ -20,14 +20,16 @@ export async function PATCH(request: NextRequest) {
   try {
     assertSameOrigin(request);
     assertContentLength(request, 4096);
-    const current = await requireRole(request, ["superAdmin"]);
+    const current = await requireRole(request, ["superAdmin", "boothAdmin"]);
     rateLimit(`admin-booth:${current.account.id}`, 40, 10 * 60 * 1000);
     const { ip, userAgent } = clientFingerprint(request.headers);
     const body = (await request.json()) as { boothId?: string; name?: string };
     const name = sanitizeBoothName(body.name || "");
+    const boothId = current.account.role === "boothAdmin" ? current.account.boothId : body.boothId;
+    if (!boothId) throw new HttpError(400, "부스를 선택하세요.");
 
     await updateDb(async (db) => {
-      const booth = db.booths.find((item) => item.id === body.boothId);
+      const booth = db.booths.find((item) => item.id === boothId);
       if (!booth) throw new HttpError(404, "부스를 찾을 수 없습니다.");
       const oldName = booth.name;
       booth.name = name;
