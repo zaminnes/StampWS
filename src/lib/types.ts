@@ -1,0 +1,149 @@
+export type Role = "participant" | "boothAdmin" | "rewardAdmin" | "superAdmin";
+
+export type RewardId = "chemistry" | "biology" | "quasar" | "alphago";
+
+export type Account = {
+  id: string;
+  loginId: string;
+  loginIdLower: string;
+  passwordHash: string;
+  role: Role;
+  displayName: string;
+  boothId?: string;
+  rewardId?: RewardId;
+  selectedRewardId?: RewardId;
+  qrVersion: number;
+  displayNameChangedAt?: string;
+  displayNameChangeDay?: string;
+  displayNameChangeCountToday?: number;
+  disabled: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+};
+
+export type Session = {
+  id: string;
+  accountId: string;
+  tokenHash: string;
+  role: Role;
+  createdAt: string;
+  expiresAt: string;
+  revoked: boolean;
+  ipHash: string;
+  userAgentHash: string;
+};
+
+export type AdminInviteCode = {
+  id: string;
+  codeLabel: string;
+  codeHash: string;
+  role: Exclude<Role, "participant">;
+  boothId?: string;
+  rewardId?: RewardId;
+  used: boolean;
+  usedByAccountId?: string;
+  usedAt?: string;
+  revoked: boolean;
+  createdAt: string;
+};
+
+export type Booth = {
+  id: string;
+  name: string;
+  clubName: string;
+  adminAccountIds: string[];
+  stampImageDataUrl?: string;
+  stampDesignUpdatedAt?: string;
+  active: boolean;
+};
+
+export type RewardItem = {
+  id: RewardId;
+  name: string;
+  clubName: string;
+  imagePath: string;
+  active: boolean;
+};
+
+export type Stamp = {
+  id: string;
+  participantAccountId: string;
+  boothId: string;
+  boothName: string;
+  stampImageDataUrl: string;
+  issuedByAdminId: string;
+  createdAt: string;
+  voided: boolean;
+};
+
+export type Coupon = {
+  id: string;
+  participantAccountId: string;
+  rewardId: RewardId;
+  status: "unused" | "redeemed";
+  createdAt: string;
+  redeemedAt?: string;
+  redeemedByAccountId?: string;
+};
+
+export type Profile = {
+  accountId: string;
+  nickname: string;
+  bio: string;
+  avatarStampId?: string;
+  themeId: string;
+  frameId: string;
+  publicProfile: boolean;
+  updatedAt: string;
+};
+
+export type UserStats = {
+  accountId: string;
+  stampCount: number;
+  uniqueBoothCount: number;
+  couponEligible: boolean;
+  couponClaimed: boolean;
+  firstStampAt?: string;
+  lastStampAt?: string;
+  completedSevenAt?: string;
+};
+
+export type NameChangeLog = {
+  id: string;
+  accountId: string;
+  oldDisplayName: string;
+  newDisplayName: string;
+  changedAt: string;
+  ipHash: string;
+  userAgentHash: string;
+};
+
+export type AuditLog = {
+  id: string;
+  actorAccountId: string;
+  action: string;
+  targetId?: string;
+  createdAt: string;
+  ipHash: string;
+  userAgentHash: string;
+  metadata?: Record<string, string | number | boolean | null>;
+};
+
+export type StampDb = {
+  meta: {
+    createdAt: string;
+    updatedAt: string;
+    version: number;
+  };
+  accounts: Account[];
+  sessions: Session[];
+  adminInviteCodes: AdminInviteCode[];
+  booths: Booth[];
+  rewards: RewardItem[];
+  stamps: Stamp[];
+  coupons: Coupon[];
+  profiles: Profile[];
+  userStats: UserStats[];
+  nameChangeLogs: NameChangeLog[];
+  auditLogs: AuditLog[];
+};

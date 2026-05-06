@@ -1,0 +1,12 @@
+.next
+node_modules
+.env*.local
+.data
+.DS_Store
+firebase-debug.log
+*.tsbuildinfo
+/*.png
+달고나.png
+아이스티.png
+콩가루차.png
+팝콘.png
