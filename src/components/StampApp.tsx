@@ -95,7 +95,8 @@ type BluetoothDevice = {
 type BluetoothNavigator = Navigator & {
   bluetooth?: {
     requestDevice: (options: {
-      filters: Array<{ namePrefix: string }>;
+      filters?: Array<{ namePrefix: string }>;
+      acceptAllDevices?: boolean;
       optionalServices: string[];
     }) => Promise<BluetoothDevice>;
   };
@@ -336,7 +337,7 @@ function canvasToPrinterBitmap(canvas: HTMLCanvasElement) {
     for (let x = 0; x < width; x += 1) {
       const index = (y * width + x) * 4;
       const gray = imageData.data[index] * 0.299 + imageData.data[index + 1] * 0.587 + imageData.data[index + 2] * 0.114;
-      if (gray < 160) {
+      if (gray < 128) {
         bitmap[y * bytesPerLine + Math.floor(x / 8)] |= 1 << (7 - (x % 8));
       }
     }
@@ -376,11 +377,11 @@ async function connectNemonicPrinter() {
     throw new Error("네모닉 인쇄는 HTTPS 또는 localhost에서만 가능합니다.");
   }
   if (!bluetooth) {
-    throw new Error("Chrome 또는 Edge에서 블루투스를 켜주세요.");
+    throw new Error("PC Chrome 또는 Edge에서 열고 블루투스를 켜주세요.");
   }
 
   const device = await bluetooth.requestDevice({
-    filters: [{ namePrefix: "nemonic" }, { namePrefix: "Nemonic" }],
+    acceptAllDevices: true,
     optionalServices: PRINTER_SERVICES.map((item) => item.service)
   });
   const server = await device.gatt?.connect();
@@ -413,9 +414,9 @@ async function printTempPasses(passes: TempPassView[], printerType: PrinterType,
       await writePrinter(characteristic, packet.slice(offset, Math.min(offset + 100, packet.length)));
       await delay(10);
     }
-    await delay(700);
+    await delay(1000);
     await writePrinter(characteristic, new Uint8Array([0x1b, 0x69]));
-    await delay(350);
+    await delay(500);
     onProgress(12 + Math.round(((index + 1) / printable.length) * 88));
   }
 }
