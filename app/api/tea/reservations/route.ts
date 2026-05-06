@@ -7,9 +7,12 @@ import { rateLimit } from "@/lib/rate-limit";
 import {
   assertTeaMakerAccess,
   canOperateTeaMaker,
+  decrementTeaStock,
+  hasTeaCouponPriority,
   isOpenTeaReservation,
   nextTeaOrderNumber,
   TEA_DEFAULT_COMMAND,
+  teaStockCount,
   teaReservationView
 } from "@/lib/tea-access";
 
@@ -27,11 +30,13 @@ function normalizeSerialCommand(value?: string) {
   return command;
 }
 
-function sortReservations<T extends { status: string; orderNumber: number; createdAt: string }>(items: T[]) {
+function sortReservations<T extends { status: string; orderNumber: number; createdAt: string; source?: string }>(items: T[]) {
   const statusOrder: Record<string, number> = { brewing: 0, ready: 1, reserved: 2, served: 3, cancelled: 4 };
   return items.slice().sort((a, b) => {
     const byStatus = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
     if (byStatus !== 0) return byStatus;
+    const byPriority = (b.source === "reward" ? 1 : 0) - (a.source === "reward" ? 1 : 0);
+    if (byPriority !== 0) return byPriority;
     if (a.orderNumber !== b.orderNumber) return a.orderNumber - b.orderNumber;
     return a.createdAt.localeCompare(b.createdAt);
   });
@@ -50,12 +55,12 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, 8)
         .map(teaReservationView);
-      return jsonOk({ reservations, canOperate: false });
+      return jsonOk({ reservations, canOperate: false, stockCount: teaStockCount(db), stockUpdatedAt: db.meta.teaStockUpdatedAt });
     }
 
     assertTeaMakerAccess(account);
     const reservations = sortReservations(db.teaReservations).slice(0, 80).map(teaReservationView);
-    return jsonOk({ reservations, canOperate: true });
+    return jsonOk({ reservations, canOperate: true, stockCount: teaStockCount(db), stockUpdatedAt: db.meta.teaStockUpdatedAt });
   } catch (error) {
     return jsonError(error);
   }
@@ -78,6 +83,8 @@ export async function POST(request: NextRequest) {
       if (account.role === "participant") {
         const hasOpen = db.teaReservations.some((item) => item.participantAccountId === account.id && isOpenTeaReservation(item));
         if (hasOpen) throw new HttpError(409, "진행 중인 티 예약이 있습니다.");
+        if (teaStockCount(db) <= 0) throw new HttpError(409, "아이스티 재고가 없습니다.");
+        const priority = hasTeaCouponPriority(db, account.id);
 
         const reservation = {
           id: randomId("tea"),
@@ -85,7 +92,7 @@ export async function POST(request: NextRequest) {
           participantAccountId: account.id,
           displayName: account.displayName,
           studentCode: account.studentCode,
-          source: "online" as const,
+          source: priority ? ("reward" as const) : ("online" as const),
           status: "reserved" as const,
           quantity: 1,
           note: sanitizeNote(body.note || ""),
@@ -102,7 +109,7 @@ export async function POST(request: NextRequest) {
           createdAt: now,
           ipHash: await hashFingerprint(ip),
           userAgentHash: await hashFingerprint(userAgent),
-          metadata: { orderNumber: reservation.orderNumber, source: reservation.source }
+          metadata: { orderNumber: reservation.orderNumber, source: reservation.source, priority }
         });
         return teaReservationView(reservation);
       }
@@ -164,6 +171,9 @@ export async function PATCH(request: NextRequest) {
       const now = new Date().toISOString();
       const action = body.action || "start";
       if (action === "start") {
+        if (!reservation.startedAt) {
+          decrementTeaStock(db, actor.id, now);
+        }
         reservation.status = "brewing";
         reservation.startedAt = now;
         reservation.handledByAccountId = actor.id;

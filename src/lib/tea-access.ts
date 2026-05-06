@@ -20,6 +20,29 @@ export function nextTeaOrderNumber(db: StampDb) {
   return db.teaReservations.reduce((max, item) => Math.max(max, item.orderNumber || 0), 0) + 1;
 }
 
+export function hasTeaCouponPriority(db: StampDb, accountId: string) {
+  return db.coupons.some((coupon) => (
+    coupon.participantAccountId === accountId &&
+    coupon.rewardId === TEA_REWARD_ID &&
+    coupon.status === "unused"
+  ));
+}
+
+export function teaStockCount(db: StampDb) {
+  return Math.max(0, Math.floor(db.meta.teaStockCount || 0));
+}
+
+export function decrementTeaStock(db: StampDb, accountId: string, now: string) {
+  const current = teaStockCount(db);
+  if (current <= 0) {
+    throw new HttpError(409, "아이스티 재고가 없습니다.");
+  }
+  db.meta.teaStockCount = current - 1;
+  db.meta.teaStockUpdatedAt = now;
+  db.meta.teaStockUpdatedByAccountId = accountId;
+  return db.meta.teaStockCount;
+}
+
 export function isOpenTeaReservation(reservation: TeaReservation) {
   return reservation.status === "reserved" || reservation.status === "brewing" || reservation.status === "ready";
 }
@@ -31,6 +54,7 @@ export function teaReservationView(reservation: TeaReservation) {
     displayName: reservation.displayName,
     studentCode: reservation.studentCode,
     source: reservation.source,
+    priority: reservation.source === "reward",
     status: reservation.status,
     quantity: reservation.quantity,
     note: reservation.note,

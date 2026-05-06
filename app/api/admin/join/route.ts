@@ -19,12 +19,16 @@ import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
+function isReusableClubInvite(role?: string) {
+  return role === "boothAdmin" || role === "rewardAdmin";
+}
+
 export async function POST(request: NextRequest) {
   try {
     assertSameOrigin(request);
     assertContentLength(request, 4096);
     const { ip, userAgent } = clientFingerprint(request.headers);
-    rateLimit(`admin-join:${ip}`, 8, 10 * 60 * 1000);
+    rateLimit(`admin-join:${ip}`, 60, 10 * 60 * 1000);
 
     const body = (await request.json()) as {
       loginId?: string;
@@ -44,8 +48,11 @@ export async function POST(request: NextRequest) {
       }
 
       const invite = db.adminInviteCodes.find((item) => item.codeHash === inviteCodeHash);
-      if (!invite || invite.used || invite.revoked) {
-        throw new HttpError(403, "관리자 가입번호가 올바르지 않거나 이미 사용되었습니다.");
+      if (!invite || invite.revoked) {
+        throw new HttpError(403, "관리자 가입번호가 올바르지 않거나 비활성화되었습니다.");
+      }
+      if (!isReusableClubInvite(invite.role) && invite.used) {
+        throw new HttpError(403, "총괄 관리자 가입번호는 이미 사용되었습니다.");
       }
 
       const newAccount = {
@@ -63,9 +70,11 @@ export async function POST(request: NextRequest) {
       };
 
       db.accounts.push(newAccount);
+      const previousUseCount = invite.usedCount || (invite.used ? 1 : 0);
       invite.used = true;
       invite.usedByAccountId = newAccount.id;
       invite.usedAt = now;
+      invite.usedCount = previousUseCount + 1;
 
       if (invite.boothId) {
         const clubId = clubIdFromBoothId(invite.boothId);

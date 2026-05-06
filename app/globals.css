@@ -924,6 +924,13 @@ textarea {
   min-width: 0;
 }
 
+.teaHeroBadges {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .teaHeroCopy h2 {
   color: #0f172a;
   font-size: clamp(30px, 4vw, 42px);
@@ -954,6 +961,25 @@ textarea {
   padding: 7px 11px;
 }
 
+.teaPriorityChip {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  color: #64748b;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  min-height: 30px;
+  padding: 7px 11px;
+}
+
+.teaPriorityChip.active {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
 .teaStatusChip.ready {
   background: var(--success-bg);
   border-color: #bbf7d0;
@@ -975,7 +1001,7 @@ textarea {
 .teaHeroMetrics {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 120px));
+  grid-template-columns: repeat(3, minmax(0, 120px));
 }
 
 .teaHeroMetrics div {
@@ -1037,6 +1063,32 @@ textarea {
   gap: 12px;
   grid-template-columns: minmax(0, 1fr) 132px;
   padding: 14px;
+}
+
+.teaPriorityNotice {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+}
+
+.teaPriorityNotice.active {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.teaPriorityNotice strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.teaPriorityNotice span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .teaReserveAction label {
@@ -1122,6 +1174,11 @@ textarea {
   color: var(--ink);
   font-size: 14px;
   font-weight: 900;
+}
+
+.teaRecentItem.priority {
+  background: #eff6ff;
+  border-color: #bfdbfe;
 }
 
 .teaDeviceHero {
@@ -1439,6 +1496,122 @@ th {
 .teaQueuePanel {
   display: grid;
   gap: 14px;
+}
+
+.teaStockBox {
+  align-items: end;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 120px auto;
+  padding: 12px;
+}
+
+.teaStockBox strong {
+  display: block;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.teaStockBox span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 850;
+  margin-top: 5px;
+}
+
+.firmwarePanel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.firmwareHeader,
+.firmwareActions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.firmwareHeader strong {
+  display: block;
+  font-size: 15px;
+}
+
+.firmwareHeader span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.firmwareEditor {
+  background: #0f172a;
+  border-color: #1e293b;
+  color: #e5e7eb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  min-height: 260px;
+  white-space: pre;
+}
+
+.noticePanel {
+  display: grid;
+  gap: 12px;
+}
+
+.noticeComposer {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.noticeList {
+  display: grid;
+  gap: 10px;
+}
+
+.noticeItem {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.noticeItem div {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.noticeItem strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.noticeItem span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.noticeItem p {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 750;
+  margin: 0;
 }
 
 .secondaryLink {
@@ -1807,6 +1980,7 @@ th {
   .accountTools,
   .boothNameRow,
   .teaCustomerHero,
+  .teaStockBox,
   .teaQueueRow {
     grid-template-columns: 1fr;
   }
@@ -1882,11 +2056,13 @@ th {
 
   .teaHeroMetrics,
   .teaReserveAction,
+  .noticeComposer,
   .teaRecentItem {
     grid-template-columns: 1fr;
   }
 
-  .teaReserveCta {
+  .teaReserveCta,
+  .noticeComposer button {
     width: 100%;
   }
 

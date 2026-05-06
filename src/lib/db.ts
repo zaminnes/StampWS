@@ -6,6 +6,7 @@ import type {
   AdminInviteCode,
   AuditLog,
   Booth,
+  ClubNotice,
   Coupon,
   NameChangeLog,
   Profile,
@@ -38,6 +39,7 @@ const COLLECTIONS = {
   coupons: "stampAppCoupons",
   tempPasses: "stampAppTempPasses",
   teaReservations: "stampAppTeaReservations",
+  clubNotices: "stampAppClubNotices",
   profiles: "stampAppProfiles",
   userStats: "stampAppUserStats",
   nameChangeLogs: "stampAppNameChangeLogs",
@@ -76,6 +78,14 @@ const BOOTHS: Booth[] = CLUBS.flatMap((club) =>
 let initPromise: Promise<void> | null = null;
 let writeQueue: Promise<unknown> = Promise.resolve();
 let tokenCache: { accessToken: string; expiresAt: number } | null = null;
+
+async function readDefaultArduinoFirmware() {
+  try {
+    return await fs.readFile(path.join(process.cwd(), "public", "arduino", "alphago_tea_maker_full.ino"), "utf8");
+  } catch {
+    return "";
+  }
+}
 
 function useFirestoreBackend() {
   if (process.env.STAMP_DB_BACKEND === "firestore") return true;
@@ -150,6 +160,7 @@ async function buildAdminInviteCodes(now: string) {
       boothId,
       rewardId: club.rewardId,
       used: false,
+      usedCount: 0,
       revoked: false,
       createdAt: now
     });
@@ -165,6 +176,7 @@ async function buildAdminInviteCodes(now: string) {
       codeHash: await hashToken(normalizeInviteCode(rawCode)),
       role: "superAdmin",
       used: false,
+      usedCount: 0,
       revoked: false,
       createdAt: now
     });
@@ -196,8 +208,17 @@ async function buildInitialDb() {
   const { inviteCodes, bootstrapLines: inviteBootstrapLines } = await buildAdminInviteCodes(now);
   bootstrapLines.push(...inviteBootstrapLines);
 
+  const defaultFirmwareText = await readDefaultArduinoFirmware();
   const db: StampDb = {
-    meta: { createdAt: now, updatedAt: now, version: 1 },
+    meta: {
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+      arduinoFirmwareText: defaultFirmwareText || undefined,
+      arduinoFirmwareUpdatedAt: defaultFirmwareText ? now : undefined,
+      teaStockCount: 0,
+      teaStockUpdatedAt: now
+    },
     accounts: [
       {
         id: superAccountId,
@@ -219,6 +240,7 @@ async function buildInitialDb() {
     coupons: [],
     tempPasses: [],
     teaReservations: [],
+    clubNotices: [],
     profiles: [],
     userStats: [],
     nameChangeLogs: [],
@@ -380,6 +402,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
   const coupons = await listCollection<Coupon>("coupons");
   const tempPasses = await listCollection<TempPass>("tempPasses");
   const teaReservations = await listCollection<TeaReservation>("teaReservations");
+  const clubNotices = await listCollection<ClubNotice>("clubNotices");
   const profiles = await listCollection<Profile>("profiles");
   const userStats = await listCollection<UserStats>("userStats");
   const nameChangeLogs = await listCollection<NameChangeLog>("nameChangeLogs");
@@ -397,6 +420,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       coupons: coupons.items,
       tempPasses: tempPasses.items,
       teaReservations: teaReservations.items,
+      clubNotices: clubNotices.items,
       profiles: profiles.items,
       userStats: userStats.items,
       nameChangeLogs: nameChangeLogs.items,
@@ -413,6 +437,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       coupons: coupons.payloads,
       tempPasses: tempPasses.payloads,
       teaReservations: teaReservations.payloads,
+      clubNotices: clubNotices.payloads,
       profiles: profiles.payloads,
       userStats: userStats.payloads,
       nameChangeLogs: nameChangeLogs.payloads,
@@ -428,6 +453,7 @@ async function readFirestoreSnapshot(): Promise<FirestoreSnapshot> {
       coupons: coupons.names,
       tempPasses: tempPasses.names,
       teaReservations: teaReservations.names,
+      clubNotices: clubNotices.names,
       profiles: profiles.names,
       userStats: userStats.names,
       nameChangeLogs: nameChangeLogs.names,
@@ -447,6 +473,7 @@ function emptyPayloadMaps(): Record<CollectionKey, Map<string, string>> {
     coupons: new Map(),
     tempPasses: new Map(),
     teaReservations: new Map(),
+    clubNotices: new Map(),
     profiles: new Map(),
     userStats: new Map(),
     nameChangeLogs: new Map(),
@@ -465,6 +492,7 @@ function emptyNameSets(): Record<CollectionKey, Set<string>> {
     coupons: new Set(),
     tempPasses: new Set(),
     teaReservations: new Set(),
+    clubNotices: new Set(),
     profiles: new Set(),
     userStats: new Set(),
     nameChangeLogs: new Set(),
@@ -528,6 +556,7 @@ async function commitFirestoreDb(db: StampDb, snapshot: FirestoreSnapshot) {
   addCollectionWrites(writes, "coupons", db.coupons, snapshot.payloads.coupons, snapshot.names.coupons);
   addCollectionWrites(writes, "tempPasses", db.tempPasses, snapshot.payloads.tempPasses, snapshot.names.tempPasses);
   addCollectionWrites(writes, "teaReservations", db.teaReservations, snapshot.payloads.teaReservations, snapshot.names.teaReservations);
+  addCollectionWrites(writes, "clubNotices", db.clubNotices, snapshot.payloads.clubNotices, snapshot.names.clubNotices);
   addCollectionWrites(writes, "profiles", db.profiles, snapshot.payloads.profiles, snapshot.names.profiles);
   addCollectionWrites(writes, "userStats", db.userStats, snapshot.payloads.userStats, snapshot.names.userStats);
   addCollectionWrites(writes, "nameChangeLogs", db.nameChangeLogs, snapshot.payloads.nameChangeLogs, snapshot.names.nameChangeLogs);
@@ -552,6 +581,7 @@ async function readFirestoreDb() {
 function normalizeDb(db: StampDb) {
   db.tempPasses ||= [];
   db.teaReservations ||= [];
+  db.clubNotices ||= [];
   db.rewards = REWARDS.map((reward) => ({
     ...reward,
     active: db.rewards.find((item) => item.id === reward.id)?.active ?? reward.active
@@ -617,11 +647,23 @@ export async function resetDbToClubSetup(actorAccountId: string, ipHash: string,
     const superAccounts = db.accounts.filter((account) => account.role === "superAdmin");
     const superAccountIds = new Set(superAccounts.map((account) => account.id));
     const { inviteCodes } = await buildAdminInviteCodes(now);
+    const firmwareText = db.meta.arduinoFirmwareText;
+    const firmwareUpdatedAt = db.meta.arduinoFirmwareUpdatedAt;
+    const firmwareUpdatedByAccountId = db.meta.arduinoFirmwareUpdatedByAccountId;
+    const teaStockCount = db.meta.teaStockCount;
+    const teaStockUpdatedAt = db.meta.teaStockUpdatedAt;
+    const teaStockUpdatedByAccountId = db.meta.teaStockUpdatedByAccountId;
 
     db.meta = {
       createdAt: db.meta.createdAt || now,
       updatedAt: now,
-      version: (db.meta.version || 1) + 1
+      version: (db.meta.version || 1) + 1,
+      arduinoFirmwareText: firmwareText,
+      arduinoFirmwareUpdatedAt: firmwareUpdatedAt,
+      arduinoFirmwareUpdatedByAccountId: firmwareUpdatedByAccountId,
+      teaStockCount,
+      teaStockUpdatedAt,
+      teaStockUpdatedByAccountId
     };
     db.accounts = superAccounts;
     db.sessions = db.sessions.filter((session) => superAccountIds.has(session.accountId) && !session.revoked);
@@ -632,6 +674,7 @@ export async function resetDbToClubSetup(actorAccountId: string, ipHash: string,
     db.coupons = [];
     db.tempPasses = [];
     db.teaReservations = [];
+    db.clubNotices = [];
     db.profiles = [];
     db.userStats = [];
     db.nameChangeLogs = [];

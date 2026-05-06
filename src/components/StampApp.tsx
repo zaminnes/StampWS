@@ -38,6 +38,8 @@ type CodeRow = {
   role: string;
   targetName: string;
   used: boolean;
+  multiUse?: boolean;
+  useCount?: number;
   usedAt?: string;
   revoked: boolean;
   usedByDisplayName?: string;
@@ -76,6 +78,7 @@ type TeaReservationView = {
   displayName: string;
   studentCode?: string;
   source: "online" | "manual" | "reward";
+  priority?: boolean;
   status: "reserved" | "brewing" | "ready" | "served" | "cancelled";
   quantity: number;
   note?: string;
@@ -86,6 +89,33 @@ type TeaReservationView = {
   readyAt?: string;
   servedAt?: string;
   cancelledAt?: string;
+};
+
+type TeaReservationsPayload = {
+  reservations: TeaReservationView[];
+  stockCount?: number;
+  stockUpdatedAt?: string;
+};
+
+type TeaFirmwarePayload = {
+  firmwareText: string;
+  updatedAt?: string;
+  source: "storage" | "default";
+};
+
+type ClubNoticeView = {
+  id: string;
+  clubId: string;
+  clubName: string;
+  message: string;
+  createdAt: string;
+  createdByDisplayName: string;
+};
+
+type NoticePayload = {
+  notices: ClubNoticeView[];
+  canPost: boolean;
+  postClubName: string;
 };
 
 type AdminAccountRow = {
@@ -205,7 +235,7 @@ type MePayload = {
 };
 
 type AuthMode = "participant" | "adminLogin" | "adminJoin";
-type AppTab = "home" | "profile" | "leaderboard" | "boothScan" | "stampStudio" | "rewardScan" | "teaMaker" | "codes" | "admin" | "tempPasses";
+type AppTab = "home" | "profile" | "leaderboard" | "boothScan" | "stampStudio" | "rewardScan" | "teaMaker" | "codes" | "admin" | "tempPasses" | "notices";
 
 type StampEffectState = {
   id: number;
@@ -316,6 +346,12 @@ function serialStatusLabel(status: string) {
     error: "점검"
   };
   return labels[status] || status;
+}
+
+function teaSourceLabel(reservation: Pick<TeaReservationView, "source" | "priority">) {
+  if (reservation.priority || reservation.source === "reward") return "쿠폰 우선";
+  if (reservation.source === "manual") return "현장";
+  return "온라인";
 }
 
 function roleLabel(role?: Role) {
@@ -1007,7 +1043,8 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
         )}
       </section>
 
-      <TeaReservationCard />
+      <TeaReservationCard me={me} />
+      <NoticePanel compact />
 
       <section className="panel widePanel">
         <div className="sectionHeader compactHeader">
@@ -1035,15 +1072,17 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
   );
 }
 
-function TeaReservationCard() {
+function TeaReservationCard({ me }: { me: MePayload }) {
   const [reservations, setReservations] = useState<TeaReservationView[]>([]);
+  const [stockCount, setStockCount] = useState(0);
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const data = await apiJson<{ reservations: TeaReservationView[] }>("/api/tea/reservations", { method: "GET" });
+    const data = await apiJson<TeaReservationsPayload>("/api/tea/reservations", { method: "GET" });
     setReservations(data.reservations);
+    setStockCount(data.stockCount || 0);
   }, []);
 
   useEffect(() => {
@@ -1055,6 +1094,8 @@ function TeaReservationCard() {
   const recentReservations = reservations.slice(0, 3);
   const reservationStatus = latestReservation ? teaReservationStatus(latestReservation.status) : "주문 가능";
   const reservationTime = latestReservation ? formatTime(latestReservation.updatedAt) : "바로 예약";
+  const hasTeaCoupon = me.coupon?.rewardId === "alphago" && me.coupon.status === "unused";
+  const priorityText = hasTeaCoupon ? "쿠폰 우선 적용" : "쿠폰 선택 시 우선";
 
   async function createReservation() {
     setBusy(true);
@@ -1078,7 +1119,10 @@ function TeaReservationCard() {
     <section className="panel teaCustomerPanel widePanel">
       <div className="teaCustomerHero">
         <div className="teaHeroCopy">
-          <span className={`teaStatusChip ${latestReservation?.status || "idle"}`}>{reservationStatus}</span>
+          <div className="teaHeroBadges">
+            <span className={`teaStatusChip ${latestReservation?.status || "idle"}`}>{reservationStatus}</span>
+            <span className={`teaPriorityChip ${hasTeaCoupon ? "active" : ""}`}>{priorityText}</span>
+          </div>
           <h2>아이스티</h2>
           <p>Automatic Ice-Tea Maker</p>
           <div className="teaHeroMetrics">
@@ -1090,6 +1134,10 @@ function TeaReservationCard() {
               <span>시간</span>
               <strong>{reservationTime}</strong>
             </div>
+            <div>
+              <span>재고</span>
+              <strong>{stockCount}잔</strong>
+            </div>
           </div>
         </div>
         <div className="teaProductStage" aria-hidden="true">
@@ -1098,13 +1146,18 @@ function TeaReservationCard() {
         </div>
       </div>
 
+      <div className={`teaPriorityNotice ${hasTeaCoupon ? "active" : ""}`}>
+        <strong>{hasTeaCoupon ? "우선 제조" : "쿠폰 우선"}</strong>
+        <span>{hasTeaCoupon ? "알파고 쿠폰 예약은 먼저 처리됩니다." : "아이스티 쿠폰을 선택하면 예약 대기열에서 우선권을 받습니다."}</span>
+      </div>
+
       <div className="teaReserveAction">
         <label>
           <span>요청 메모</span>
           <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={60} placeholder="얼음 적게" />
         </label>
-        <button className="teaReserveCta" disabled={busy || Boolean(activeReservation)} onClick={createReservation} type="button">
-          {busy ? "처리중" : activeReservation ? "진행중" : "예약구매"}
+        <button className="teaReserveCta" disabled={busy || Boolean(activeReservation) || stockCount <= 0} onClick={createReservation} type="button">
+          {busy ? "처리중" : activeReservation ? "진행중" : stockCount <= 0 ? "품절" : "예약구매"}
         </button>
       </div>
       {message && <p className={message.includes("실패") || message.includes("진행") ? "errorText" : "statusText"}>{message}</p>}
@@ -1116,14 +1169,90 @@ function TeaReservationCard() {
         </div>
         <div className="teaRecentList">
           {recentReservations.map((reservation) => (
-            <div className="teaRecentItem" key={reservation.id}>
+            <div className={`teaRecentItem ${reservation.priority ? "priority" : ""}`} key={reservation.id}>
               <span>#{reservation.orderNumber}</span>
-              <strong>{teaReservationStatus(reservation.status)}</strong>
+              <strong>{reservation.priority ? "쿠폰 우선" : teaReservationStatus(reservation.status)}</strong>
               <small>{formatTime(reservation.updatedAt)}</small>
             </div>
           ))}
           {recentReservations.length === 0 && <p className="emptyText">아직 없음</p>}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function NoticePanel({ compact = false }: { compact?: boolean }) {
+  const [notices, setNotices] = useState<ClubNoticeView[]>([]);
+  const [canPost, setCanPost] = useState(false);
+  const [postClubName, setPostClubName] = useState("");
+  const [message, setMessage] = useState("");
+  const [noticeText, setNoticeText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const data = await apiJson<NoticePayload>("/api/notices", { method: "GET" });
+    setNotices(data.notices);
+    setCanPost(data.canPost);
+    setPostClubName(data.postClubName);
+  }, []);
+
+  useEffect(() => {
+    load().catch((err) => setMessage(err instanceof Error ? err.message : "공지 로드 실패"));
+    const timer = window.setInterval(() => {
+      load().catch(() => undefined);
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  async function sendNotice() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const data = await apiJson<{ notices: ClubNoticeView[] }>("/api/notices", {
+        method: "POST",
+        body: JSON.stringify({ message: noticeText })
+      });
+      setNoticeText("");
+      setNotices(data.notices);
+      setMessage("공지 보냄");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "공지 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const visibleNotices = compact ? notices.slice(0, 5) : notices;
+
+  return (
+    <section className={`panel noticePanel ${compact ? "widePanel" : ""}`}>
+      <div className="sectionHeader compactHeader">
+        <div>
+          <h2>공지</h2>
+          <p>{canPost ? `${postClubName}에서 보냄.` : "동아리 소식."}</p>
+        </div>
+      </div>
+      {canPost && (
+        <div className="noticeComposer">
+          <input value={noticeText} onChange={(event) => setNoticeText(event.target.value)} maxLength={120} placeholder="짧은 공지" />
+          <button className="primaryButton" disabled={busy || noticeText.trim().length < 2} onClick={sendNotice} type="button">
+            보내기
+          </button>
+        </div>
+      )}
+      {message && <p className={message.includes("보냄") ? "statusText" : "errorText"}>{message}</p>}
+      <div className="noticeList">
+        {visibleNotices.map((notice) => (
+          <article className="noticeItem" key={notice.id}>
+            <div>
+              <strong>{notice.clubName}</strong>
+              <span>{formatTime(notice.createdAt)} · {notice.createdByDisplayName}</span>
+            </div>
+            <p>{notice.message}</p>
+          </article>
+        ))}
+        {visibleNotices.length === 0 && <p className="emptyText">공지 없음</p>}
       </div>
     </section>
   );
@@ -1522,7 +1651,7 @@ function CodesPanel() {
       <div className="sectionHeader">
         <div>
           <h2>코드</h2>
-          <p>{showFullCode ? "총괄은 원문 표시." : "원문은 숨김."}</p>
+          <p>{showFullCode ? "동아리는 반복 가입." : "원문은 숨김."}</p>
         </div>
       </div>
       {error && <p className="errorText">{error}</p>}
@@ -1542,6 +1671,7 @@ function CodesPanel() {
                     <th>역할</th>
                     <th>담당</th>
                     <th>상태</th>
+                    <th>계정</th>
                     <th>사용 시간</th>
                     <th>사용자</th>
                   </tr>
@@ -1553,7 +1683,8 @@ function CodesPanel() {
                       {showFullCode && <td className="codeText">{code.fullCode || "seed 없음"}</td>}
                       <td>{code.role}</td>
                       <td>{code.targetName}</td>
-                      <td><span className={`pill ${code.used ? "done" : "ok"}`}>{code.revoked ? "비활성" : code.used ? "사용됨" : "미사용"}</span></td>
+                      <td><span className={`pill ${code.revoked ? "done" : code.multiUse ? "ok" : code.used ? "done" : "ok"}`}>{code.revoked ? "비활성" : code.multiUse ? "반복 가능" : code.used ? "사용됨" : "미사용"}</span></td>
+                      <td>{code.multiUse ? `${code.useCount || 0}개` : code.used ? "1개" : "0개"}</td>
                       <td>{formatTime(code.usedAt)}</td>
                       <td>{code.usedByDisplayName || "-"}</td>
                     </tr>
@@ -2030,7 +2161,7 @@ function DatabaseResetPanel({ refresh }: { refresh: () => Promise<void> }) {
         </div>
       </div>
       <div className="summaryRows">
-        <div><span>동아리 계정</span><strong>4개 코드</strong></div>
+        <div><span>동아리 계정</span><strong>반복 코드</strong></div>
         <div><span>총괄 코드</span><strong>2개 유지</strong></div>
         <div><span>참가 기록</span><strong>전체 삭제</strong></div>
       </div>
@@ -2052,6 +2183,12 @@ function TeaMakerPanel() {
   const [serialConnected, setSerialConnected] = useState(false);
   const [machineStatus, setMachineStatus] = useState("offline");
   const [serialCommand, setSerialCommand] = useState(TEA_DEFAULT_COMMAND);
+  const [stockCount, setStockCount] = useState(0);
+  const [stockDraft, setStockDraft] = useState(0);
+  const [stockUpdatedAt, setStockUpdatedAt] = useState("");
+  const [firmwareText, setFirmwareText] = useState("");
+  const [firmwareUpdatedAt, setFirmwareUpdatedAt] = useState("");
+  const [firmwareSource, setFirmwareSource] = useState<"storage" | "default">("default");
   const [manualName, setManualName] = useState("현장주문");
   const [logs, setLogs] = useState<string[]>(["연결 대기"]);
   const [message, setMessage] = useState("");
@@ -2060,17 +2197,28 @@ function TeaMakerPanel() {
   const openReservations = reservations.filter((reservation) => ["reserved", "brewing", "ready"].includes(reservation.status));
 
   const load = useCallback(async () => {
-    const data = await apiJson<{ reservations: TeaReservationView[] }>("/api/tea/reservations", { method: "GET" });
+    const data = await apiJson<TeaReservationsPayload>("/api/tea/reservations", { method: "GET" });
     setReservations(data.reservations);
+    setStockCount(data.stockCount || 0);
+    setStockDraft(data.stockCount || 0);
+    setStockUpdatedAt(data.stockUpdatedAt || "");
+  }, []);
+
+  const loadFirmware = useCallback(async () => {
+    const data = await apiJson<TeaFirmwarePayload>("/api/tea/firmware", { method: "GET" });
+    setFirmwareText(data.firmwareText);
+    setFirmwareUpdatedAt(data.updatedAt || "");
+    setFirmwareSource(data.source);
   }, []);
 
   useEffect(() => {
     load().catch((err) => setMessage(err instanceof Error ? err.message : "예약 로드 실패"));
+    loadFirmware().catch(() => undefined);
     const timer = window.setInterval(() => {
       load().catch(() => undefined);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [load]);
+  }, [load, loadFirmware]);
 
   function appendSerialLog(line: string, direction = "ARD") {
     const stamp = new Intl.DateTimeFormat("ko-KR", {
@@ -2201,13 +2349,64 @@ function TeaMakerPanel() {
     setBusy(true);
     setMessage("");
     try {
+      if (stockCount <= 0) throw new Error("아이스티 재고가 없습니다.");
       await writeSerial(serialCommand);
+      await updateStock("decrement");
       setMessage("즉시 제조");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "제조 실패");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function updateStock(action: "set" | "decrement") {
+    const data = await apiJson<{ stockCount: number; updatedAt: string }>("/api/tea/stock", {
+      method: "PATCH",
+      body: JSON.stringify({ action, stockCount: stockDraft })
+    });
+    setStockCount(data.stockCount);
+    setStockDraft(data.stockCount);
+    setStockUpdatedAt(data.updatedAt);
+    return data.stockCount;
+  }
+
+  async function saveStock() {
+    setBusy(true);
+    setMessage("");
+    try {
+      await updateStock("set");
+      setMessage("재고 저장");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "재고 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveFirmware() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const data = await apiJson<{ updatedAt: string; bytes: number }>("/api/tea/firmware", {
+        method: "PATCH",
+        body: JSON.stringify({ firmwareText })
+      });
+      setFirmwareUpdatedAt(data.updatedAt);
+      setFirmwareSource("storage");
+      setMessage(`INO 저장 ${Math.round(data.bytes / 1024)}KB`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "INO 저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadFirmwareFile(file?: File) {
+    if (!file) return;
+    const text = await file.text();
+    setFirmwareText(text);
+    setMessage(`${file.name} 불러옴`);
   }
 
   async function createManualReservation() {
@@ -2254,6 +2453,17 @@ function TeaMakerPanel() {
             <span>Automatic Ice-Tea Maker</span>
           </div>
         </div>
+        <div className="teaStockBox">
+          <div>
+            <strong>{stockCount}잔</strong>
+            <span>현재 재고 · {formatTime(stockUpdatedAt)}</span>
+          </div>
+          <label>
+            재고
+            <input value={stockDraft} onChange={(event) => setStockDraft(Number(event.target.value))} min={0} max={5000} type="number" />
+          </label>
+          <button className="primaryButton" disabled={busy} onClick={saveStock} type="button">저장</button>
+        </div>
         <div className="canvasTools">
           <button className="primaryButton" onClick={serialConnected ? disconnectDevice : connectDevice} type="button">
             {serialConnected ? "해제" : "USB 연결"}
@@ -2274,6 +2484,23 @@ function TeaMakerPanel() {
         </div>
         {message && <p className={message.includes("실패") || message.includes("필요") ? "errorText" : "statusText"}>{message}</p>}
         <div className="serialLogBox">{logs.join("\n")}</div>
+        <div className="firmwarePanel">
+          <div className="firmwareHeader">
+            <div>
+              <strong>INO 저장</strong>
+              <span>{firmwareSource === "storage" ? "저장본" : "기본본"} · {formatTime(firmwareUpdatedAt)}</span>
+            </div>
+            <div className="firmwareActions">
+              <label className="fileScanButton">
+                업로드
+                <input accept=".ino,text/plain" onChange={(event) => loadFirmwareFile(event.target.files?.[0]).catch((err) => setMessage(err instanceof Error ? err.message : "파일 실패"))} type="file" />
+              </label>
+              <a className="secondaryLink" href="/api/tea/firmware?raw=1" target="_blank" rel="noreferrer">다운로드</a>
+              <button className="primaryButton" disabled={busy || firmwareText.trim().length < 200} onClick={saveFirmware} type="button">저장</button>
+            </div>
+          </div>
+          <textarea className="firmwareEditor" value={firmwareText} onChange={(event) => setFirmwareText(event.target.value)} spellCheck={false} />
+        </div>
       </section>
 
       <section className="panel teaQueuePanel">
@@ -2289,7 +2516,7 @@ function TeaMakerPanel() {
             <div className={`teaQueueRow ${reservation.status}`} key={reservation.id}>
               <div>
                 <strong>#{reservation.orderNumber} {reservation.displayName}</strong>
-                <span>{teaReservationStatus(reservation.status)} · {reservation.source === "online" ? "온라인" : "현장"} · {formatTime(reservation.createdAt)}</span>
+                <span>{teaReservationStatus(reservation.status)} · {teaSourceLabel(reservation)} · {formatTime(reservation.createdAt)}</span>
               </div>
               <div className="teaQueueActions">
                 {reservation.status === "reserved" && <button className="primaryButton" disabled={busy || !serialConnected} onClick={() => startReservation(reservation)} type="button">제조</button>}
@@ -2445,12 +2672,14 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       ["rewardScan", "사용"],
       ...(teaAccess ? [["teaMaker", "티메이커"] as [AppTab, string]] : []),
       ["stampStudio", "도장"],
+      ["notices", "공지"],
       ["codes", "코드"],
       ["leaderboard", "랭킹"]
     ] as Array<[AppTab, string]>;
     if (role === "rewardAdmin") return [
       ["rewardScan", "사용"],
       ...(teaAccess ? [["teaMaker", "티메이커"] as [AppTab, string]] : []),
+      ["notices", "공지"],
       ["codes", "코드"],
       ["leaderboard", "랭킹"]
     ] as Array<[AppTab, string]>;
@@ -2458,6 +2687,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       ["admin", "총괄"],
       ["teaMaker", "티메이커"],
       ["tempPasses", "임시"],
+      ["notices", "공지"],
       ["codes", "코드"],
       ["leaderboard", "랭킹"]
     ] as Array<[AppTab, string]>;
@@ -2548,6 +2778,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       {!(role === "participant" && me.account.displayNameRequired) && tab === "boothScan" && <BoothScanPanel me={me} onScan={handleStampScan} />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "tempPasses" && role === "superAdmin" && <TempPassPanel />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "teaMaker" && teaAccess && <TeaMakerPanel />}
+      {!(role === "participant" && me.account.displayNameRequired) && tab === "notices" && <NoticePanel />}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "rewardScan" && (
         <div className="gridTwo">
           <section className="panel rewardAdminCard">

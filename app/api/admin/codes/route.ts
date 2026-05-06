@@ -43,6 +43,13 @@ export async function GET(request: NextRequest) {
       const usedBy = code.usedByAccountId ? db.accounts.find((item) => item.id === code.usedByAccountId) : undefined;
       const groupName = code.role === "superAdmin" ? "총괄" : groupLabel(booth?.clubName || reward?.clubName);
       const integratedClubAdmin = code.role === "boothAdmin" && Boolean(code.rewardId);
+      const multiUse = code.role !== "superAdmin";
+      const linkedAccounts = db.accounts.filter((account) => (
+        account.role === code.role &&
+        (code.boothId ? account.boothId === code.boothId : !account.boothId) &&
+        (code.rewardId ? account.rewardId === code.rewardId : !account.rewardId)
+      ));
+      const useCount = multiUse ? Math.max(code.usedCount || 0, linkedAccounts.length) : (code.used ? 1 : 0);
 
       return {
         codeLabel: code.codeLabel,
@@ -50,7 +57,9 @@ export async function GET(request: NextRequest) {
         groupName,
         role: integratedClubAdmin ? "통합" : code.role === "boothAdmin" ? "부스" : code.role === "rewardAdmin" ? "보상" : "총괄",
         targetName: integratedClubAdmin ? `${groupName} 통합` : booth?.name || reward?.name || "System",
-        used: code.used,
+        used: code.used || useCount > 0,
+        multiUse,
+        useCount,
         usedAt: code.usedAt,
         revoked: code.revoked,
         usedByDisplayName: isSuper ? usedBy?.displayName : undefined

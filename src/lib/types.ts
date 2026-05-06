@@ -43,6 +43,7 @@ export type AdminInviteCode = {
   boothId?: string;
   rewardId?: RewardId;
   used: boolean;
+  usedCount?: number;
   usedByAccountId?: string;
   usedAt?: string;
   revoked: boolean;
@@ -131,6 +132,16 @@ export type TeaReservation = {
   cancelledByAccountId?: string;
 };
 
+export type ClubNotice = {
+  id: string;
+  clubId: string;
+  clubName: string;
+  message: string;
+  createdByAccountId: string;
+  createdAt: string;
+  revoked: boolean;
+};
+
 export type Profile = {
   accountId: string;
   nickname: string;
@@ -181,6 +192,12 @@ export type StampDb = {
     version: number;
     defaultStampImageDataUrl?: string;
     defaultStampUpdatedAt?: string;
+    arduinoFirmwareText?: string;
+    arduinoFirmwareUpdatedAt?: string;
+    arduinoFirmwareUpdatedByAccountId?: string;
+    teaStockCount?: number;
+    teaStockUpdatedAt?: string;
+    teaStockUpdatedByAccountId?: string;
   };
   accounts: Account[];
   sessions: Session[];
@@ -191,6 +208,7 @@ export type StampDb = {
   coupons: Coupon[];
   tempPasses: TempPass[];
   teaReservations: TeaReservation[];
+  clubNotices: ClubNotice[];
   profiles: Profile[];
   userStats: UserStats[];
   nameChangeLogs: NameChangeLog[];
