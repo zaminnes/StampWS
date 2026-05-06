@@ -49,18 +49,25 @@ const REWARDS: RewardItem[] = [
   { id: "alphago", name: "Iced Tea", clubName: "Alphago", imagePath: "/rewards/iced-tea.png", active: true }
 ];
 
-const BOOTHS: Booth[] = [
-  { id: "chemistry", name: "Chemistry Lab", clubName: "Chemistry", adminAccountIds: [], active: true },
-  { id: "biology", name: "Life Science Lab", clubName: "Biology", adminAccountIds: [], active: true },
-  { id: "quasar", name: "Quasar Space Lab", clubName: "Quasar", adminAccountIds: [], active: true },
-  { id: "alphago", name: "Alphago AI Lab", clubName: "Alphago", adminAccountIds: [], active: true },
-  { id: "physics", name: "Physics Zone", clubName: "Physics", adminAccountIds: [], active: true },
-  { id: "earth", name: "Earth Science Zone", clubName: "Earth Science", adminAccountIds: [], active: true },
-  { id: "robotics", name: "Robotics Zone", clubName: "Robotics", adminAccountIds: [], active: true },
-  { id: "math", name: "Math Puzzle Zone", clubName: "Math", adminAccountIds: [], active: true },
-  { id: "astronomy", name: "Astronomy Zone", clubName: "Astronomy", adminAccountIds: [], active: true },
-  { id: "maker", name: "Maker Zone", clubName: "Maker", adminAccountIds: [], active: true }
-];
+const CLUBS = [
+  { id: "chemistry", name: "Chemistry" },
+  { id: "biology", name: "Biology" },
+  { id: "quasar", name: "Quasar" },
+  { id: "alphago", name: "Alphago" }
+] as const;
+
+const BOOTHS: Booth[] = CLUBS.flatMap((club) =>
+  Array.from({ length: 10 }, (_, index) => {
+    const boothNumber = String(index + 1).padStart(2, "0");
+    return {
+      id: `${club.id}_booth_${boothNumber}`,
+      name: `${club.name} ${boothNumber}`,
+      clubName: club.name,
+      adminAccountIds: [],
+      active: true
+    };
+  })
+);
 
 let initPromise: Promise<void> | null = null;
 let writeQueue: Promise<unknown> = Promise.resolve();

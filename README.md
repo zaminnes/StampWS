@@ -27,9 +27,9 @@ Keep that file server-side only. It is ignored by git.
 ## Roles
 
 - `participant`: participant QR, stamp gallery, profile customization, leaderboard, one reward coupon after 7 stamps
-- `boothAdmin`: draw booth stamp, scan participant QR, grant one stamp per participant per booth
-- `rewardAdmin`: scan coupon QR, redeem only the assigned reward
-- `superAdmin`: overview and secret invite-code status
+- `boothAdmin`: 40 booth codes, 10 per club
+- `rewardAdmin`: 8 reward codes, 2 per reward
+- `superAdmin`: 2 super admin codes
 
 ## Security model
 

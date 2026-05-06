@@ -15,13 +15,15 @@ function code(label) {
   return `${label}-${suffix}`;
 }
 
-const boothIds = ["chemistry", "biology", "quasar", "alphago", "physics", "earth", "robotics", "math", "astronomy", "maker"];
+const clubs = ["chemistry", "biology", "quasar", "alphago"];
 const rewardIds = ["chemistry", "biology", "quasar", "alphago"];
 
 console.log("Booth admin codes");
 for (let index = 1; index <= 40; index += 1) {
   const label = `B-${String(index).padStart(2, "0")}`;
-  console.log(`${label} ${boothIds[(index - 1) % boothIds.length]} ${code(label)}`);
+  const club = clubs[Math.floor((index - 1) / 10)];
+  const boothNumber = String(((index - 1) % 10) + 1).padStart(2, "0");
+  console.log(`${label} ${club}_booth_${boothNumber} ${code(label)}`);
 }
 
 console.log("");
