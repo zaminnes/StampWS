@@ -127,6 +127,14 @@ function rewardLabel(reward?: Reward) {
   return `${reward.clubName} - ${reward.name}`;
 }
 
+function roleLabel(role?: Role) {
+  if (role === "participant") return "참가자";
+  if (role === "boothAdmin") return "부스";
+  if (role === "rewardAdmin") return "보상";
+  if (role === "superAdmin") return "총괄";
+  return "-";
+}
+
 function QrImage({ token, label }: { token: string; label: string }) {
   return (
     <div className="qrBox" aria-label={label}>
@@ -297,13 +305,57 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
         </button>
       </section>
       <section className="quickPanel">
-        <section className="panel">
-          <h2>보상</h2>
-          <div className="rewardStrip">
-            <img src="/rewards/dalgona.png" alt="Dalgona" />
-            <img src="/rewards/bean-tea.png" alt="Bean Powder Tea" />
-            <img src="/rewards/popcorn.png" alt="Popcorn" />
-            <img src="/rewards/iced-tea.png" alt="Iced Tea" />
+        <section className="panel opsPanel">
+          <div className="previewHeader">
+            <div>
+              <p className="eyebrow">운영</p>
+              <h2>오늘 화면</h2>
+            </div>
+            <span className="liveBadge">준비</span>
+          </div>
+          <div className="flowList">
+            <div className="flowItem primaryFlow">
+              <span className="flowIcon">QR</span>
+              <div>
+                <strong>내 QR</strong>
+                <p>부스에서 제시</p>
+              </div>
+              <span>참가자</span>
+            </div>
+            <div className="flowItem">
+              <span className="flowIcon">IN</span>
+              <div>
+                <strong>스탬프</strong>
+                <p>관리자가 지급</p>
+              </div>
+              <span>부스</span>
+            </div>
+            <div className="flowItem">
+              <span className="flowIcon">OK</span>
+              <div>
+                <strong>쿠폰</strong>
+                <p>하나만 선택</p>
+              </div>
+              <span>보상</span>
+            </div>
+          </div>
+          <div className="rewardRail">
+            <div>
+              <img src="/rewards/dalgona.png" alt="Dalgona" />
+              <span>화학</span>
+            </div>
+            <div>
+              <img src="/rewards/bean-tea.png" alt="Bean Powder Tea" />
+              <span>생명</span>
+            </div>
+            <div>
+              <img src="/rewards/popcorn.png" alt="Popcorn" />
+              <span>퀘이사</span>
+            </div>
+            <div>
+              <img src="/rewards/iced-tea.png" alt="Iced Tea" />
+              <span>알파고</span>
+            </div>
           </div>
         </section>
       </section>
@@ -316,7 +368,13 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
   const [error, setError] = useState("");
   const rewards = me.rewards || [];
   const couponReward = rewards.find((reward) => reward.id === me.coupon?.rewardId);
+  const stamps = me.stamps || [];
   const progress = Math.min(me.stats?.stampCount || 0, 7);
+  const remaining = Math.max(7 - progress, 0);
+  const latestStamp = [...stamps].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  const couponStatus = me.coupon
+    ? me.coupon.status === "unused" ? "사용 가능" : "사용 완료"
+    : me.stats?.couponEligible ? "변환 가능" : "대기";
 
   async function createCoupon() {
     setError("");
@@ -333,18 +391,44 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
 
   return (
     <div className="gridTwo">
-      <section className="panel profilePreview">
-        <div className={`avatarFrame frame-${me.profile?.frameId || "clean"}`}>
-          {me.profile?.avatarStampImageDataUrl ? <img src={me.profile.avatarStampImageDataUrl} alt="대표 스탬프" /> : <span>STAMP</span>}
-        </div>
-        <div>
-          <p className="eyebrow">참가자</p>
-          <h2>{me.account?.displayName}</h2>
-          <p>{me.profile?.bio || "한 줄 소개 없음"}</p>
-          <div className="progressTrack">
-            <span style={{ width: `${(progress / 7) * 100}%` }} />
+      <section className="panel homeSummary">
+        <div className="sectionHeader compactHeader">
+          <div>
+            <p className="eyebrow">내 기록</p>
+            <h2>{me.account?.displayName}</h2>
           </div>
-          <p className="statusText">스탬프 {me.stats?.stampCount || 0}/7개</p>
+          <span className={`pill ${remaining === 0 ? "ok" : "done"}`}>
+            {couponStatus}
+          </span>
+        </div>
+        <div className="identityBlock">
+          <div className={`avatarFrame frame-${me.profile?.frameId || "clean"}`}>
+            {me.profile?.avatarStampImageDataUrl ? <img src={me.profile.avatarStampImageDataUrl} alt="대표 스탬프" /> : <span>STAMP</span>}
+          </div>
+          <div>
+            <p>{me.profile?.bio || "한 줄 소개 없음"}</p>
+            <div className="progressLabel">
+              <strong>{progress}/7</strong>
+              <span>스탬프</span>
+            </div>
+            <div className="progressTrack">
+              <span style={{ width: `${(progress / 7) * 100}%` }} />
+            </div>
+          </div>
+        </div>
+        <div className="summaryRows">
+          <div>
+            <span>남은 스탬프</span>
+            <strong>{remaining === 0 ? "완료" : `${remaining}개`}</strong>
+          </div>
+          <div>
+            <span>최근 기록</span>
+            <strong>{latestStamp ? latestStamp.boothName : "없음"}</strong>
+          </div>
+          <div>
+            <span>쿠폰 상태</span>
+            <strong>{couponStatus}</strong>
+          </div>
         </div>
       </section>
 
@@ -391,16 +475,22 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
       </section>
 
       <section className="panel widePanel">
-        <h2>스탬프</h2>
+        <div className="sectionHeader compactHeader">
+          <div>
+            <h2>스탬프</h2>
+            <p>받은 기록.</p>
+          </div>
+          <span className="countText">{stamps.length}개</span>
+        </div>
         <div className="stampGrid">
-          {(me.stamps || []).map((stamp) => (
+          {stamps.map((stamp) => (
             <div className="stampTile" key={stamp.id}>
               <img src={stamp.stampImageDataUrl} alt={stamp.boothName} />
               <strong>{stamp.boothName}</strong>
               <span>{formatTime(stamp.createdAt)}</span>
             </div>
           ))}
-          {(me.stamps || []).length === 0 && <p className="emptyText">기록 없음</p>}
+          {stamps.length === 0 && <p className="emptyText">기록 없음</p>}
         </div>
       </section>
     </div>
@@ -792,7 +882,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
         </div>
         <div className="userChip">
           <span>{me.account.displayName}</span>
-          <small>{me.account.role}</small>
+          <small>{roleLabel(me.account.role)}</small>
           <button className="secondaryButton" onClick={logout} type="button">나가기</button>
         </div>
       </header>

@@ -16,7 +16,7 @@
   --danger: #b91c1c;
   --info-bg: #eff6ff;
   --info: #1d4ed8;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 10px 28px rgba(16, 24, 40, 0.06);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 22px rgba(16, 24, 40, 0.04);
 }
 
 * {
@@ -73,6 +73,8 @@ img {
   display: grid;
   grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
   gap: 18px;
+  margin: 0 auto;
+  max-width: 1120px;
   min-height: 100vh;
   padding: 32px;
 }
@@ -117,25 +119,115 @@ img {
   display: grid;
 }
 
-.quickPanel .panel {
-  align-content: start;
+.opsPanel {
   display: grid;
   gap: 18px;
 }
 
-.rewardStrip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(96px, 1fr));
-  gap: 12px;
+.previewHeader {
+  align-items: start;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 16px;
 }
 
-.rewardStrip img {
-  aspect-ratio: 1;
+.previewHeader h2 {
+  font-size: 26px;
+  margin: 0;
+}
+
+.liveBadge,
+.countText {
+  background: #f3f4f6;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 7px 10px;
+}
+
+.flowList {
+  display: grid;
+  gap: 10px;
+}
+
+.flowItem {
+  align-items: center;
   background: var(--surface-soft);
   border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 44px 1fr auto;
+  min-height: 72px;
+  padding: 12px;
+}
+
+.flowItem.primaryFlow {
+  background: #f8fbff;
+  border-color: #bfdbfe;
+}
+
+.flowIcon {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
   border-radius: 10px;
+  color: var(--primary);
+  display: flex;
+  font-size: 12px;
+  font-weight: 900;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.flowItem strong {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+.flowItem p {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.flowItem > span:last-child {
+  color: var(--subtle);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.rewardRail {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rewardRail div {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px 10px;
+  place-items: center;
+}
+
+.rewardRail img {
+  aspect-ratio: 1;
+  height: 58px;
   object-fit: contain;
-  padding: 16px;
+}
+
+.rewardRail span {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .segmented,
@@ -349,6 +441,10 @@ select:focus {
   margin-bottom: 16px;
 }
 
+.compactHeader {
+  margin-bottom: 14px;
+}
+
 .sectionHeader h2,
 .panel h2 {
   font-size: 22px;
@@ -371,6 +467,19 @@ select:focus {
   gap: 18px;
 }
 
+.homeSummary {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+}
+
+.identityBlock {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 92px 1fr;
+}
+
 .avatarFrame,
 .miniAvatar {
   align-items: center;
@@ -388,6 +497,24 @@ select:focus {
   font-size: 13px;
   font-weight: 900;
   min-width: 0;
+}
+
+.progressLabel {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.progressLabel strong {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.progressLabel span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .avatarFrame img,
@@ -417,6 +544,39 @@ select:focus {
   background: var(--primary);
   display: block;
   height: 100%;
+}
+
+.summaryRows {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.summaryRows div {
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 12px;
+}
+
+.summaryRows div:last-child {
+  border-bottom: 0;
+}
+
+.summaryRows span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.summaryRows strong {
+  color: var(--ink);
+  font-size: 14px;
+  text-align: right;
 }
 
 .qrBox {
@@ -710,6 +870,7 @@ th {
   .gridTwo,
   .couponLayout,
   .profilePreview,
+  .identityBlock,
   .formGrid {
     grid-template-columns: 1fr;
   }
@@ -718,7 +879,7 @@ th {
     padding: 14px;
   }
 
-  .rewardStrip,
+  .rewardRail,
   .rewardGrid,
   .metricGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -748,10 +909,18 @@ th {
 }
 
 @media (max-width: 540px) {
-  .rewardStrip,
+  .rewardRail,
   .rewardGrid,
   .metricGrid {
     grid-template-columns: 1fr;
+  }
+
+  .flowItem {
+    grid-template-columns: 40px 1fr;
+  }
+
+  .flowItem > span:last-child {
+    display: none;
   }
 
   .sectionHeader {
