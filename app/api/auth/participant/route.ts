@@ -9,8 +9,13 @@ export const runtime = "nodejs";
 
 function normalizeStudentCode(value: string) {
   const normalized = value.normalize("NFKC").replace(/\s+/g, "").trim();
-  if (!/^[0-9]{3,8}$/.test(normalized)) {
-    throw new HttpError(400, "학번은 숫자 3~8자로 입력하세요.");
+  if (!/^[1-3][0-9]{4}$/.test(normalized)) {
+    throw new HttpError(400, "학번은 예: 10214 형식으로 입력하세요.");
+  }
+  const classNumber = Number(normalized.slice(1, 3));
+  const studentNumber = Number(normalized.slice(3, 5));
+  if (classNumber < 1 || classNumber > 15 || studentNumber < 1 || studentNumber > 40) {
+    throw new HttpError(400, "학년/반/번호가 맞는지 확인하세요.");
   }
   return normalized;
 }

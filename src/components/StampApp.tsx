@@ -161,6 +161,22 @@ async function apiJson<T>(url: string, options?: RequestInit): Promise<T> {
   return data;
 }
 
+function publicQrValue(token: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_STAMP_PUBLIC_URL || "https://stampws.kr";
+  return `${baseUrl}/?qr=${encodeURIComponent(token)}`;
+}
+
+function extractQrToken(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    return url.searchParams.get("qr") || url.searchParams.get("token") || trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
 function formatTime(value?: string) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("ko-KR", {
@@ -252,7 +268,7 @@ async function renderTempPassCanvas(pass: TempPassView, printerType: PrinterType
   const qrSize = printerType === "mini" ? 188 : 244;
   const qrX = Math.round((width - qrSize) / 2);
   const qrY = printerType === "mini" ? 116 : 138;
-  const qrImage = await loadCanvasImage(`/api/qr?value=${encodeURIComponent(pass.qrToken)}`);
+  const qrImage = await loadCanvasImage(`/api/qr?value=${encodeURIComponent(publicQrValue(pass.qrToken))}`);
   context.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
   drawCenteredText(context, "7개 완료 후 보상 부스 스캔", qrY + qrSize + 22, width, printerType === "mini" ? 18 : 22, 800);
@@ -357,7 +373,7 @@ async function printTempPasses(passes: TempPassView[], printerType: PrinterType,
 function QrImage({ token, label }: { token: string; label: string }) {
   return (
     <div className="qrBox" aria-label={label}>
-      <img src={`/api/qr?value=${encodeURIComponent(token)}`} alt={label} />
+      <img src={`/api/qr?value=${encodeURIComponent(publicQrValue(token))}`} alt={label} />
       <p>{label}</p>
     </div>
   );
@@ -407,7 +423,7 @@ function Scanner({ label, onScan }: { label: string; onScan: (token: string) => 
       if (cancelled || !videoRef.current) return;
       try {
         const codes = await detector.detect(videoRef.current);
-        const token = codes[0]?.rawValue;
+        const token = extractQrToken(codes[0]?.rawValue || "");
         if (token && !busyRef.current) {
           busyRef.current = true;
           await onScan(token);
@@ -430,7 +446,7 @@ function Scanner({ label, onScan }: { label: string; onScan: (token: string) => 
 
   async function submitManual() {
     if (!manual.trim()) return;
-    await onScan(manual.trim());
+    await onScan(extractQrToken(manual));
     setManual("");
     setMessage("처리 완료");
   }
@@ -545,7 +561,9 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
             onChange={(event) => setLoginId(event.target.value)}
             autoComplete="username"
             inputMode={mode === "participant" ? "numeric" : "text"}
-            placeholder={mode === "participant" ? "학년반번호" : ""}
+            maxLength={mode === "participant" ? 5 : undefined}
+            pattern={mode === "participant" ? "[1-3][0-9]{4}" : undefined}
+            placeholder={mode === "participant" ? "예: 10214" : ""}
           />
         </label>
         {mode !== "participant" && (
@@ -1129,7 +1147,7 @@ function TempPassPanel() {
             </div>
             <p className="tempPassLabel">{pass.label}</p>
             {pass.qrToken ? (
-              <img src={`/api/qr?value=${encodeURIComponent(pass.qrToken)}`} alt={`${pass.label} QR`} />
+              <img src={`/api/qr?value=${encodeURIComponent(publicQrValue(pass.qrToken))}`} alt={`${pass.label} QR`} />
             ) : (
               <div className="usedQr">완료</div>
             )}

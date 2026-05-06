@@ -19,7 +19,11 @@ env:
     availability:
       - RUNTIME
   - variable: STAMP_ALLOWED_ORIGINS
-    value: https://stampwooshin--stampwooshin.asia-east1.hosted.app,https://stampwooshin.web.app,https://stampwooshin.firebaseapp.com
+    value: https://stampws.kr,https://www.stampws.kr,https://stampwooshin--stampwooshin.asia-east1.hosted.app,https://stampwooshin.web.app,https://stampwooshin.firebaseapp.com
+    availability:
+      - RUNTIME
+  - variable: NEXT_PUBLIC_STAMP_PUBLIC_URL
+    value: https://stampws.kr
     availability:
       - RUNTIME
   - variable: APP_SECRET
