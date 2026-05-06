@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireRole } from "@/lib/auth";
-import { clientFingerprint, createTempPassQrToken, hashFingerprint, randomId } from "@/lib/crypto";
+import { clientFingerprint, createTempPassQrToken, hashFingerprint, randomId, sanitizeDisplayName } from "@/lib/crypto";
 import { readDb, updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
 import { rateLimit } from "@/lib/rate-limit";
@@ -20,6 +20,7 @@ async function tempPassView(pass: TempPass) {
   return {
     id: pass.id,
     label: pass.label,
+    displayName: pass.displayName || pass.label,
     status: pass.status,
     stampCount: pass.stamps.length,
     createdAt: pass.createdAt,
@@ -54,8 +55,13 @@ export async function POST(request: NextRequest) {
     const current = await requireRole(request, ["superAdmin"]);
     rateLimit(`temp-pass-create:${current.account.id}`, 10, 10 * 60 * 1000);
     const { ip, userAgent } = clientFingerprint(request.headers);
-    const body = (await request.json()) as { count?: number };
-    const count = Math.floor(Number(body.count || 1));
+    const body = (await request.json()) as { count?: number; displayNames?: string; displayName?: string };
+    const names = (body.displayNames || body.displayName || "")
+      .split(/\n|,/)
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name) => sanitizeDisplayName(name));
+    const count = names.length > 0 ? names.length : Math.floor(Number(body.count || 1));
     if (!Number.isInteger(count) || count < 1 || count > 40) {
       throw new HttpError(400, "1~40개만 생성할 수 있습니다.");
     }
@@ -70,6 +76,7 @@ export async function POST(request: NextRequest) {
       const newPasses: TempPass[] = Array.from({ length: count }, (_, index) => ({
         id: randomId("tmp"),
         label: nextTempLabel(db.tempPasses, index + 1),
+        displayName: names[index] || nextTempLabel(db.tempPasses, index + 1),
         qrVersion: 1,
         status: "active",
         stamps: [],

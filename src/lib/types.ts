@@ -99,6 +99,7 @@ export type TempPassStamp = {
 export type TempPass = {
   id: string;
   label: string;
+  displayName?: string;
   qrVersion: number;
   status: "active" | "redeemed" | "voided";
   stamps: TempPassStamp[];

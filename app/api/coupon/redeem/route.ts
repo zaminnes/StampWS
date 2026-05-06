@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         });
 
         return {
-          participantName: tempPass.label,
+          participantName: tempPass.displayName || tempPass.label,
           rewardName: reward.name,
           rewardClubName: reward.clubName,
           redeemedAt: now,

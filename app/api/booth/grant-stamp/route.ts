@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         });
 
         return {
-          participantName: tempPass.label,
+          participantName: tempPass.displayName || tempPass.label,
           stampCount: tempPass.stamps.length,
           couponEligible: tempPass.stamps.length >= 7,
           temporary: true

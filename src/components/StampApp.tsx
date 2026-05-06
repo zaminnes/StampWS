@@ -47,6 +47,7 @@ type LeaderboardRow = {
 type TempPassView = {
   id: string;
   label: string;
+  displayName: string;
   status: "active" | "redeemed" | "voided";
   stampCount: number;
   createdAt: string;
@@ -225,6 +226,10 @@ function drawCenteredText(context: CanvasRenderingContext2D, text: string, y: nu
   context.fillText(text, width / 2, y);
 }
 
+function fitText(value: string, maxLength: number) {
+  return Array.from(value).slice(0, maxLength).join("");
+}
+
 async function renderTempPassCanvas(pass: TempPassView, printerType: PrinterType) {
   if (!pass.qrToken) throw new Error("인쇄할 QR 토큰이 없습니다.");
   const width = PRINTER_WIDTHS[printerType];
@@ -242,7 +247,7 @@ async function renderTempPassCanvas(pass: TempPassView, printerType: PrinterType
   context.strokeRect(14, 14, width - 28, height - 28);
 
   drawCenteredText(context, "WSHS SCIENCE", 34, width, printerType === "mini" ? 22 : 26, 900);
-  drawCenteredText(context, pass.label, printerType === "mini" ? 68 : 76, width, printerType === "mini" ? 30 : 38, 900);
+  drawCenteredText(context, fitText(pass.displayName || pass.label, 12), printerType === "mini" ? 68 : 76, width, printerType === "mini" ? 30 : 38, 900);
 
   const qrSize = printerType === "mini" ? 188 : 244;
   const qrX = Math.round((width - qrSize) / 2);
@@ -251,7 +256,7 @@ async function renderTempPassCanvas(pass: TempPassView, printerType: PrinterType
   context.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
   drawCenteredText(context, "7개 완료 후 보상 부스 스캔", qrY + qrSize + 22, width, printerType === "mini" ? 18 : 22, 800);
-  drawCenteredText(context, "랭킹 제외", qrY + qrSize + (printerType === "mini" ? 48 : 56), width, printerType === "mini" ? 14 : 16, 700);
+  drawCenteredText(context, `${pass.label} · 랭킹 포함`, qrY + qrSize + (printerType === "mini" ? 48 : 56), width, printerType === "mini" ? 14 : 16, 700);
 
   return canvas;
 }
@@ -1020,6 +1025,7 @@ function TempPassPanel() {
   const [passes, setPasses] = useState<TempPassView[]>([]);
   const [lastCreatedIds, setLastCreatedIds] = useState<Set<string>>(new Set());
   const [count, setCount] = useState(4);
+  const [displayNames, setDisplayNames] = useState("");
   const [printerType, setPrinterType] = useState<PrinterType>("normal");
   const [busy, setBusy] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -1045,11 +1051,12 @@ function TempPassPanel() {
     try {
       const data = await apiJson<{ created: TempPassView[] }>("/api/admin/temp-passes", {
         method: "POST",
-        body: JSON.stringify({ count })
+        body: JSON.stringify({ count, displayNames })
       });
       setLastCreatedIds(new Set(data.created.map((pass) => pass.id)));
       await load();
       setMessage(`${data.created.length}개 생성`);
+      setDisplayNames("");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "생성 실패");
     } finally {
@@ -1086,6 +1093,10 @@ function TempPassPanel() {
           생성 수
           <input min={1} max={40} type="number" value={count} onChange={(event) => setCount(Number(event.target.value))} />
         </label>
+        <label className="tempNameInput">
+          이름
+          <textarea value={displayNames} onChange={(event) => setDisplayNames(event.target.value)} placeholder="한 줄에 한 명" rows={3} />
+        </label>
         <label>
           프린터
           <select value={printerType} onChange={(event) => setPrinterType(event.target.value as PrinterType)}>
@@ -1104,7 +1115,7 @@ function TempPassPanel() {
       <div className="summaryRows tempSummary">
         <div><span>인쇄 대상</span><strong>{printTargets.length}개</strong></div>
         <div><span>사용 가능</span><strong>{passes.filter((pass) => pass.status === "active").length}개</strong></div>
-        <div><span>랭킹</span><strong>제외</strong></div>
+        <div><span>랭킹</span><strong>포함</strong></div>
       </div>
 
       {message && <p className={message.includes("완료") || message.includes("생성") ? "statusText" : "errorText"}>{message}</p>}
@@ -1113,9 +1124,10 @@ function TempPassPanel() {
         {passes.map((pass) => (
           <div className={`tempPassCard ${lastCreatedIds.has(pass.id) ? "selected" : ""}`} key={pass.id}>
             <div>
-              <strong>{pass.label}</strong>
+              <strong>{pass.displayName}</strong>
               <span className={`pill ${pass.status === "active" ? "ok" : "done"}`}>{tempPassStatus(pass)}</span>
             </div>
+            <p className="tempPassLabel">{pass.label}</p>
             {pass.qrToken ? (
               <img src={`/api/qr?value=${encodeURIComponent(pass.qrToken)}`} alt={`${pass.label} QR`} />
             ) : (

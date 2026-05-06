@@ -35,7 +35,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -46,7 +47,8 @@ button {
 
 button,
 input,
-select {
+select,
+textarea {
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
@@ -274,7 +276,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   background: #fff;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
@@ -284,10 +287,16 @@ select {
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
   outline: 0;
+}
+
+textarea {
+  min-height: 80px;
+  resize: vertical;
 }
 
 .primaryButton,
@@ -891,7 +900,11 @@ th {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(150px, 0.8fr) auto auto;
+  grid-template-columns: minmax(120px, 0.6fr) minmax(220px, 1.4fr) minmax(150px, 0.8fr) auto auto;
+}
+
+.tempNameInput {
+  grid-row: span 2;
 }
 
 .tempSummary {
@@ -970,6 +983,15 @@ th {
   margin: 0;
 }
 
+.tempPassLabel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  justify-self: start;
+  padding: 5px 8px;
+}
+
 @media (max-width: 860px) {
   .authShell,
   .gridTwo,
@@ -993,6 +1015,11 @@ th {
 
   .tempControls {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .tempNameInput {
+    grid-column: 1 / -1;
+    grid-row: auto;
   }
 
   .tempSummary div {
