@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clientFingerprint, hashFingerprint, hashToken, randomId } from "./crypto";
+import { clientFingerprint, hashFingerprint, hashToken, normalizeLoginId, randomId } from "./crypto";
 import { readDb, updateDb } from "./db";
 import { HttpError } from "./http";
 import type { Account, LoginEvent, Role, Session } from "./types";
@@ -70,6 +70,10 @@ function loginEventFor(device: Awaited<ReturnType<typeof getRequestDevice>>, dat
   };
 }
 
+function uniqueLoginIds(values: Array<string | undefined>) {
+  return [...new Set(values.map((value) => value ? normalizeLoginId(value) : "").filter(Boolean))];
+}
+
 export async function recordLoginFailure(request: NextRequest, loginId: string, reason: string, role?: Role) {
   const device = await getRequestDevice(request);
   await updateDb((db) => {
@@ -89,6 +93,19 @@ export async function assertParticipantDeviceAllowed(request: NextRequest, login
   const db = await readDb();
   const block = db.deviceBlocks.find((item) => item.deviceHash === device.deviceHash && item.active);
   if (!block) return device;
+
+  const requestedLoginId = normalizeLoginId(loginId);
+  const blockedLoginIds = uniqueLoginIds(block.loginIds);
+  if (blockedLoginIds.length === 1 && blockedLoginIds[0] === requestedLoginId) {
+    await updateDb((currentDb) => {
+      const currentBlock = currentDb.deviceBlocks.find((item) => item.id === block.id && item.active);
+      if (currentBlock) {
+        currentBlock.active = false;
+        currentBlock.releasedAt = new Date().toISOString();
+      }
+    });
+    return device;
+  }
 
   await updateDb((currentDb) => {
     currentDb.loginEvents ||= [];
@@ -145,11 +162,11 @@ export async function createSession(account: Account, request: NextRequest) {
         event.role === "participant" &&
         event.result === "success" &&
         event.createdAt >= since &&
-        Boolean(event.accountId)
+        Boolean(event.loginId)
       ));
-      const accountIds = [...new Set(recentParticipantLogins.map((event) => event.accountId).filter(Boolean))] as string[];
-      if (accountIds.length >= PARTICIPANT_SWITCH_LIMIT && !db.deviceBlocks.some((block) => block.deviceHash === device.deviceHash && block.active)) {
-        const loginIds = [...new Set(recentParticipantLogins.map((event) => event.loginId))];
+      const loginIds = uniqueLoginIds(recentParticipantLogins.map((event) => event.loginId));
+      if (loginIds.length >= PARTICIPANT_SWITCH_LIMIT && !db.deviceBlocks.some((block) => block.deviceHash === device.deviceHash && block.active)) {
+        const accountIds = [...new Set(recentParticipantLogins.map((event) => event.accountId).filter(Boolean))] as string[];
         db.deviceBlocks.push({
           id: randomId("devblk"),
           deviceHash: device.deviceHash,
