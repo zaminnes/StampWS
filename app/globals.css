@@ -1538,6 +1538,11 @@ textarea {
   min-width: 220px;
 }
 
+.manualStampForm label {
+  flex: 1;
+  min-width: 180px;
+}
+
 .tableWrap {
   border: 1px solid var(--line);
   border-radius: 12px;

@@ -1711,6 +1711,80 @@ function BoothScanPanel({ me, onScan }: { me: MePayload; onScan: (token: string,
   );
 }
 
+function SuperAdminManualStampPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
+  const booths = useMemo(() => (me.booths || []).filter((booth) => booth.active !== false), [me.booths]);
+  const [selectedBoothId, setSelectedBoothId] = useState("");
+  const [studentCode, setStudentCode] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const selectedBooth = booths.find((booth) => booth.id === selectedBoothId) || booths[0];
+
+  useEffect(() => {
+    if (!booths.length) {
+      setSelectedBoothId("");
+      return;
+    }
+    if (!booths.some((booth) => booth.id === selectedBoothId)) {
+      setSelectedBoothId(booths[0].id);
+    }
+  }, [booths, selectedBoothId]);
+
+  async function grantManualStamp() {
+    if (!selectedBooth) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await apiJson<{ participantName: string; stampCount: number; createdParticipant?: boolean }>("/api/booth/grant-stamp", {
+        method: "POST",
+        body: JSON.stringify({ studentCode, boothId: selectedBooth.id })
+      });
+      await refresh();
+      setMessage(`${result.participantName} 지급 완료 (${result.stampCount}/${STAMP_REWARD_THRESHOLD})${result.createdParticipant ? " · 계정 생성" : ""}`);
+      setStudentCode("");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "지급 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel manualStampPanel">
+      <div className="sectionHeader">
+        <div>
+          <h2>테스트 지급</h2>
+          <p>총괄 전용.</p>
+        </div>
+      </div>
+      <div className="inlineForm manualStampForm">
+        <label>
+          부스
+          <select value={selectedBooth?.id || ""} onChange={(event) => setSelectedBoothId(event.target.value)}>
+            {booths.map((booth) => (
+              <option key={booth.id} value={booth.id}>{booth.clubName} · {booth.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          학번
+          <input
+            inputMode="numeric"
+            maxLength={5}
+            onChange={(event) => setStudentCode(event.target.value.replace(/\D/g, "").slice(0, 5))}
+            placeholder="10214"
+            value={studentCode}
+          />
+        </label>
+        <button className="primaryButton" disabled={busy || !selectedBooth || studentCode.length !== 5} onClick={grantManualStamp} type="button">
+          지급
+        </button>
+      </div>
+      <p className="hintText">QR 없이 지급.</p>
+      {message && <p className={message.includes("완료") ? "statusText" : "errorText"}>{message}</p>}
+    </section>
+  );
+}
+
 function CodesPanel() {
   const [codes, setCodes] = useState<CodeRow[]>([]);
   const [error, setError] = useState("");
@@ -2769,6 +2843,7 @@ function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<voi
           <div><strong>{me.adminSummary?.redeemedTempPassCount || 0}</strong><span>임시 지급</span></div>
         </div>
       </section>
+      <SuperAdminManualStampPanel me={me} refresh={refresh} />
       <DefaultStampPanel me={me} refresh={refresh} />
       <AccountAdminPanel />
       <SecurityLogPanel />
