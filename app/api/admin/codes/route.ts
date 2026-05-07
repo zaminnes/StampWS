@@ -22,11 +22,6 @@ function rawCodeForLabel(label: string, seed: string) {
 
 function groupLabel(value?: string) {
   if (!value) return "총괄";
-  const normalized = value.toLowerCase();
-  if (normalized.includes("chemistry") || value.includes("화학")) return "화학";
-  if (normalized.includes("biology") || value.includes("생명")) return "생명";
-  if (normalized.includes("quasar") || value.includes("퀘이사")) return "퀘이사";
-  if (normalized.includes("alphago") || value.includes("알파고")) return "알파고";
   return value;
 }
 

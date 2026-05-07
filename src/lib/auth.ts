@@ -9,7 +9,7 @@ export const DEVICE_COOKIE = "wshs_stamp_device";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 12;
 const DEVICE_MAX_AGE_SECONDS = 60 * 60 * 24 * 60;
 const PARTICIPANT_SWITCH_WINDOW_MS = 10 * 60 * 1000;
-const PARTICIPANT_SWITCH_LIMIT = 3;
+const PARTICIPANT_SWITCH_LIMIT = 2;
 
 export type CurrentSession = {
   account: Account;
@@ -100,7 +100,7 @@ export async function assertParticipantDeviceAllowed(request: NextRequest, login
     }));
     currentDb.loginEvents = currentDb.loginEvents.slice(-500);
   });
-  throw new HttpError(423, "이 기기는 여러 참가자 계정 로그인으로 잠겼습니다. 관리자에게 문의하세요.");
+  throw new HttpError(423, "같은 기기에서 여러 학번으로 반복 입장해 잠겼습니다. 관리자에게 문의하세요.");
 }
 
 export async function createSession(account: Account, request: NextRequest) {

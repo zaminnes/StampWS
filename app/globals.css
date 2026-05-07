@@ -73,10 +73,10 @@ img {
 .authShell {
   align-items: center;
   display: grid;
-  grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(320px, 420px) minmax(280px, 360px);
+  gap: 14px;
   margin: 0 auto;
-  max-width: 1120px;
+  max-width: 860px;
   min-height: 100vh;
   padding: 32px;
 }
@@ -92,20 +92,20 @@ img {
 
 .authPanel {
   display: grid;
-  gap: 18px;
-  padding: 24px;
+  gap: 14px;
+  padding: 22px;
 }
 
 .authTitle {
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 5px;
-  padding-bottom: 18px;
+  padding-bottom: 14px;
 }
 
 .authTitle h1,
 .topBar h1 {
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1;
   margin: 0;
 }
@@ -121,7 +121,7 @@ img {
   border: 1px solid #bfdbfe;
   border-radius: 10px;
   color: var(--info);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 750;
   margin: -4px 0 0;
   padding: 10px 12px;
@@ -137,6 +137,12 @@ img {
   gap: 18px;
 }
 
+.compactOpsPanel {
+  align-content: start;
+  gap: 14px;
+  padding: 18px;
+}
+
 .previewHeader {
   align-items: start;
   border-bottom: 1px solid var(--line);
@@ -148,6 +154,105 @@ img {
 .previewHeader h2 {
   font-size: 26px;
   margin: 0;
+}
+
+.compactPreviewHeader {
+  padding-bottom: 12px;
+}
+
+.compactPreviewHeader h2 {
+  font-size: 24px;
+}
+
+.authModes button {
+  font-size: 12px;
+  min-height: 36px;
+  padding: 7px 8px;
+}
+
+.statusStrip {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.statusStrip div {
+  background: #fff;
+  border-right: 1px solid var(--line);
+  display: grid;
+  gap: 3px;
+  padding: 12px 10px;
+}
+
+.statusStrip div:last-child {
+  border-right: 0;
+}
+
+.statusStrip strong {
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.statusStrip span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.simpleFlow {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 10px;
+}
+
+.simpleFlow span {
+  color: #374151;
+  font-size: 13px;
+  font-weight: 850;
+  text-align: center;
+}
+
+.rewardMiniList {
+  display: grid;
+  gap: 8px;
+}
+
+.rewardMiniList > div {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 38px 1fr;
+  min-height: 58px;
+  padding: 9px 10px;
+}
+
+.rewardMiniList img {
+  aspect-ratio: 1;
+  height: 36px;
+  object-fit: contain;
+  width: 36px;
+}
+
+.rewardMiniList strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.rewardMiniList span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .liveBadge,

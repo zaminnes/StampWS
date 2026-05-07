@@ -51,6 +51,12 @@ const COLLECTIONS = {
 } as const;
 
 type CollectionKey = keyof typeof COLLECTIONS;
+type ClubConfig = {
+  id: string;
+  name: string;
+  rewardId?: RewardId;
+  codeLabel: string;
+};
 
 const REWARDS: RewardItem[] = [
   { id: "chemistry", name: "달고나", clubName: "화학", imagePath: "/rewards/dalgona.png", active: true },
@@ -60,11 +66,18 @@ const REWARDS: RewardItem[] = [
 ];
 
 const CLUBS = [
-  { id: "chemistry", name: "화학", rewardId: "chemistry", codeLabel: "B-CHEM" },
-  { id: "biology", name: "생명", rewardId: "biology", codeLabel: "B-BIO" },
   { id: "quasar", name: "퀘이사", rewardId: "quasar", codeLabel: "B-QUASAR" },
-  { id: "alphago", name: "알파고", rewardId: "alphago", codeLabel: "B-ALPHAGO" }
-] as const satisfies ReadonlyArray<{ id: string; name: string; rewardId: RewardId; codeLabel: string }>;
+  { id: "science_inquiry", name: "과학탐구반", codeLabel: "B-SCIENCE" },
+  { id: "alphago", name: "알파고", rewardId: "alphago", codeLabel: "B-ALPHAGO" },
+  { id: "chemistry_lab", name: "화학실험탐구반", rewardId: "chemistry", codeLabel: "B-CHEMLAB" },
+  { id: "biomedical_science", name: "의생명과학탐구반", rewardId: "biology", codeLabel: "B-BIOMED" },
+  { id: "ai_drone", name: "AI 무인항공기", codeLabel: "B-AIDRONE" },
+  { id: "korean", name: "국어과", codeLabel: "B-KOREAN" },
+  { id: "creative_makers", name: "창의메이커스", codeLabel: "B-MAKERS" },
+  { id: "math", name: "수학과", codeLabel: "B-MATH" },
+  { id: "axis_physics", name: "액시스 물리탐구반", codeLabel: "B-AXIS" },
+  { id: "astronomy", name: "천문동아리", codeLabel: "B-ASTRO" }
+] satisfies ClubConfig[];
 
 const BOOTHS: Booth[] = CLUBS.flatMap((club) =>
   Array.from({ length: 10 }, (_, index) => {
@@ -604,6 +617,12 @@ function normalizeDb(db: StampDb) {
   db.clubNotices ||= [];
   db.loginEvents ||= [];
   db.deviceBlocks ||= [];
+  const existingBooths = new Map((db.booths || []).map((booth) => [booth.id, booth]));
+  db.booths = BOOTHS.map((booth) => ({
+    ...booth,
+    ...(existingBooths.get(booth.id) || {}),
+    adminAccountIds: existingBooths.get(booth.id)?.adminAccountIds || []
+  }));
   db.rewards = REWARDS.map((reward) => ({
     ...reward,
     active: db.rewards.find((item) => item.id === reward.id)?.active ?? reward.active

@@ -891,10 +891,10 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
           <h1>입장</h1>
           <p>스탬프 7개부터 쿠폰.</p>
         </div>
-        <div className="segmented">
+        <div className="segmented authModes">
           <button className={mode === "participant" ? "active" : ""} onClick={() => setMode("participant")} type="button">참가자</button>
-          <button className={mode === "adminLogin" ? "active" : ""} onClick={() => setMode("adminLogin")} type="button">관리자 로그인</button>
-          <button className={mode === "adminJoin" ? "active" : ""} onClick={() => setMode("adminJoin")} type="button">관리자 가입</button>
+          <button className={mode === "adminLogin" ? "active" : ""} onClick={() => setMode("adminLogin")} type="button">관리자</button>
+          <button className={mode === "adminJoin" ? "active" : ""} onClick={() => setMode("adminJoin")} type="button">가입</button>
         </div>
         <label>
           {mode === "participant" ? "학번" : "아이디"}
@@ -908,7 +908,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
             placeholder={mode === "participant" ? "예: 10214" : ""}
           />
         </label>
-        {mode === "participant" && <p className="hintText">중학생은 현장에서 임시 QR을 받아주세요.</p>}
+        {mode === "participant" && <p className="hintText">중학생은 임시 QR. 다른 학번 반복 입장은 제한될 수 있어요.</p>}
         {mode !== "participant" && (
           <label>
             비밀번호
@@ -933,57 +933,61 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
         </button>
       </section>
       <section className="quickPanel">
-        <section className="panel opsPanel">
-          <div className="previewHeader">
+        <section className="panel opsPanel compactOpsPanel">
+          <div className="previewHeader compactPreviewHeader">
             <div>
               <p className="eyebrow">운영</p>
-              <h2>오늘 화면</h2>
+              <h2>준비</h2>
             </div>
             <span className="liveBadge">James 제작</span>
           </div>
-          <div className="flowList">
-            <div className="flowItem primaryFlow">
-              <span className="flowIcon">QR</span>
-              <div>
-                <strong>내 QR</strong>
-                <p>부스에서 제시</p>
-              </div>
-              <span>참가자</span>
+          <div className="statusStrip">
+            <div>
+              <strong>7개</strong>
+              <span>쿠폰</span>
             </div>
-            <div className="flowItem">
-              <span className="flowIcon">IN</span>
-              <div>
-                <strong>스탬프</strong>
-                <p>관리자가 지급</p>
-              </div>
-              <span>부스</span>
-            </div>
-            <div className="flowItem">
-              <span className="flowIcon">OK</span>
-              <div>
-                <strong>쿠폰</strong>
-                <p>하나만 선택</p>
-              </div>
+            <div>
+              <strong>1개</strong>
               <span>보상</span>
             </div>
+            <div>
+              <strong>QR</strong>
+              <span>확인</span>
+            </div>
           </div>
-          <div className="rewardRail">
+          <div className="simpleFlow" aria-label="이용 순서">
+            <span>입장</span>
+            <span>스탬프</span>
+            <span>쿠폰</span>
+          </div>
+          <div className="rewardMiniList">
             <div>
-              <img src={rewardImagePath("chemistry")} alt="화학 달고나" />
-              <span>화학 달고나</span>
+              <img src={rewardImagePath("chemistry")} alt="" />
+              <div>
+                <strong>화학</strong>
+                <span>달고나</span>
+              </div>
             </div>
             <div>
-              <img src={rewardImagePath("biology")} alt="생명 콩가루차" />
-              <span>생명 콩가루차</span>
+              <img src={rewardImagePath("biology")} alt="" />
+              <div>
+                <strong>생명</strong>
+                <span>콩가루차</span>
+              </div>
             </div>
             <div>
-              <img src={rewardImagePath("quasar")} alt="퀘이사 팝콘" />
-              <span>퀘이사 팝콘</span>
+              <img src={rewardImagePath("quasar")} alt="" />
+              <div>
+                <strong>퀘이사</strong>
+                <span>팝콘</span>
+              </div>
             </div>
             <div>
-              <img src={rewardImagePath("alphago")} alt="알파고 아이스티" />
-              <span>알파고 아이스티</span>
-              <small>Automatic Ice-Tea Maker</small>
+              <img src={rewardImagePath("alphago")} alt="" />
+              <div>
+                <strong>알파고</strong>
+                <span>아이스티</span>
+              </div>
             </div>
           </div>
         </section>
@@ -1718,7 +1722,20 @@ function CodesPanel() {
 
   const showFullCode = codes.some((code) => code.fullCode);
   const groupedCodes = useMemo(() => {
-    const order = ["화학", "생명", "퀘이사", "알파고", "총괄"];
+    const order = [
+      "퀘이사",
+      "과학탐구반",
+      "알파고",
+      "화학실험탐구반",
+      "의생명과학탐구반",
+      "AI 무인항공기",
+      "국어과",
+      "창의메이커스",
+      "수학과",
+      "액시스 물리탐구반",
+      "천문동아리",
+      "총괄"
+    ];
     const groups = new Map<string, CodeRow[]>();
     for (const code of codes) {
       const group = code.groupName || "기타";
@@ -2920,6 +2937,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
   const role = me.account?.role;
   const rewards = me.rewards || [];
   const teaAccess = canUseTeaMaker(me.account);
+  const rewardAccess = Boolean(me.account?.rewardId);
 
   const nav = useMemo(() => {
     if (!role) return [];
@@ -2930,7 +2948,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
     ] as Array<[AppTab, string]>;
     if (role === "boothAdmin") return [
       ["boothScan", "지급"],
-      ["rewardScan", "쿠폰사용"],
+      ...(rewardAccess ? [["rewardScan", "쿠폰사용"] as [AppTab, string]] : []),
       ...(teaAccess ? [["teaMaker", "티메이커"] as [AppTab, string]] : []),
       ["stampStudio", "도장"],
       ["notices", "공지"],
@@ -2952,7 +2970,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       ["codes", "코드"],
       ["leaderboard", "랭킹"]
     ] as Array<[AppTab, string]>;
-  }, [role, teaAccess]);
+  }, [role, rewardAccess, teaAccess]);
 
   async function logout() {
     if (me.account?.role === "participant") {
