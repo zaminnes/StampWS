@@ -4,6 +4,7 @@ import { clientFingerprint, hashFingerprint, randomId, verifyCouponQrToken, veri
 import { updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
 import { rateLimit } from "@/lib/rate-limit";
+import { STAMP_REWARD_THRESHOLD } from "@/lib/stamp-config";
 import type { RewardId } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -38,8 +39,8 @@ export async function POST(request: NextRequest) {
         if (tempPass.qrVersion !== parsedTempPassToken.qrVersion) {
           throw new HttpError(403, "만료된 임시 QR 코드입니다.");
         }
-        if (tempPass.stamps.length < 7) {
-          throw new HttpError(403, "임시 QR은 스탬프 7개부터 보상 지급이 가능합니다.");
+        if (tempPass.stamps.length < STAMP_REWARD_THRESHOLD) {
+          throw new HttpError(403, `임시 QR은 스탬프 ${STAMP_REWARD_THRESHOLD}개부터 보상 지급이 가능합니다.`);
         }
 
         const now = new Date().toISOString();

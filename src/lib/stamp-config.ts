@@ -1,0 +1,1 @@
+export const STAMP_REWARD_THRESHOLD = 5;

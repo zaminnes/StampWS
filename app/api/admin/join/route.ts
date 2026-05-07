@@ -19,10 +19,6 @@ import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-function isReusableClubInvite(role?: string) {
-  return role === "boothAdmin" || role === "rewardAdmin";
-}
-
 export async function POST(request: NextRequest) {
   try {
     assertSameOrigin(request);
@@ -51,8 +47,19 @@ export async function POST(request: NextRequest) {
       if (!invite || invite.revoked) {
         throw new HttpError(403, "관리자 가입번호가 올바르지 않거나 비활성화되었습니다.");
       }
-      if (!isReusableClubInvite(invite.role) && invite.used) {
-        throw new HttpError(403, "총괄 관리자 가입번호는 이미 사용되었습니다.");
+      if (invite.used) {
+        throw new HttpError(403, "이미 사용된 관리자 가입번호입니다.");
+      }
+      if (invite.role !== "superAdmin") {
+        const existingClubAccount = db.accounts.find((account) => (
+          !account.disabled &&
+          account.role === invite.role &&
+          (invite.boothId ? account.boothId === invite.boothId : !account.boothId) &&
+          (invite.rewardId ? account.rewardId === invite.rewardId : !account.rewardId)
+        ));
+        if (existingClubAccount) {
+          throw new HttpError(409, "이 동아리 운영자 계정은 이미 만들어졌습니다.");
+        }
       }
 
       const newAccount = {

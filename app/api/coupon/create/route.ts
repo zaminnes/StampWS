@@ -4,6 +4,7 @@ import { clientFingerprint, createCouponQrToken, hashFingerprint, randomId } fro
 import { updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
 import { rateLimit } from "@/lib/rate-limit";
+import { STAMP_REWARD_THRESHOLD } from "@/lib/stamp-config";
 import type { RewardId } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -32,8 +33,13 @@ export async function POST(request: NextRequest) {
       const reward = db.rewards.find((item) => item.id === rewardId && item.active);
       if (!reward) throw new HttpError(404, "보상을 찾을 수 없습니다.");
 
-      const stampCount = db.stamps.filter((stamp) => stamp.participantAccountId === account.id && !stamp.voided).length;
-      if (stampCount < 7) throw new HttpError(403, "스탬프 7개 이상부터 쿠폰으로 변환할 수 있습니다.");
+      const participantStamps = db.stamps
+        .filter((stamp) => stamp.participantAccountId === account.id && !stamp.voided)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      const stampCount = participantStamps.length;
+      if (stampCount < STAMP_REWARD_THRESHOLD) {
+        throw new HttpError(403, `스탬프 ${STAMP_REWARD_THRESHOLD}개 이상부터 쿠폰으로 변환할 수 있습니다.`);
+      }
       if (db.coupons.some((item) => item.participantAccountId === account.id)) {
         throw new HttpError(409, "쿠폰은 한 번만 받을 수 있습니다.");
       }
@@ -52,7 +58,8 @@ export async function POST(request: NextRequest) {
       let stats = db.userStats.find((item) => item.accountId === account.id);
       if (stats) {
         stats.couponClaimed = true;
-        stats.couponEligible = stampCount >= 7;
+        stats.couponEligible = stampCount >= STAMP_REWARD_THRESHOLD;
+        stats.completedSevenAt ||= participantStamps[STAMP_REWARD_THRESHOLD - 1]?.createdAt;
       }
 
       db.auditLogs.push({

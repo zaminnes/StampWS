@@ -5,6 +5,7 @@ import { clientFingerprint, hashFingerprint, randomId, verifyParticipantQrToken,
 import { updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
 import { rateLimit } from "@/lib/rate-limit";
+import { STAMP_REWARD_THRESHOLD } from "@/lib/stamp-config";
 
 export const runtime = "nodejs";
 
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
         return {
           participantName: tempPass.displayName || tempPass.label,
           stampCount: tempPass.stamps.length,
-          couponEligible: tempPass.stamps.length >= 7,
+          couponEligible: tempPass.stamps.length >= STAMP_REWARD_THRESHOLD,
           temporary: true
         };
       }
@@ -121,8 +122,8 @@ export async function POST(request: NextRequest) {
       stats.uniqueBoothCount = uniqueBoothCount;
       stats.firstStampAt = stats.firstStampAt || now;
       stats.lastStampAt = now;
-      stats.couponEligible = stats.stampCount >= 7;
-      if (stats.stampCount >= 7 && !stats.completedSevenAt) stats.completedSevenAt = now;
+      stats.couponEligible = stats.stampCount >= STAMP_REWARD_THRESHOLD;
+      if (stats.stampCount >= STAMP_REWARD_THRESHOLD && !stats.completedSevenAt) stats.completedSevenAt = now;
 
       db.auditLogs.push({
         id: randomId("audit"),

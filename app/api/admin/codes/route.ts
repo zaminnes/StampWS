@@ -38,13 +38,13 @@ export async function GET(request: NextRequest) {
       const usedBy = code.usedByAccountId ? db.accounts.find((item) => item.id === code.usedByAccountId) : undefined;
       const groupName = code.role === "superAdmin" ? "총괄" : groupLabel(booth?.clubName || reward?.clubName);
       const integratedClubAdmin = code.role === "boothAdmin" && Boolean(code.rewardId);
-      const multiUse = code.role !== "superAdmin";
+      const multiUse = false;
       const linkedAccounts = db.accounts.filter((account) => (
         account.role === code.role &&
         (code.boothId ? account.boothId === code.boothId : !account.boothId) &&
         (code.rewardId ? account.rewardId === code.rewardId : !account.rewardId)
       ));
-      const useCount = multiUse ? Math.max(code.usedCount || 0, linkedAccounts.length) : (code.used ? 1 : 0);
+      const useCount = Math.max(code.usedCount || 0, linkedAccounts.length, code.used ? 1 : 0);
 
       return {
         codeLabel: code.codeLabel,

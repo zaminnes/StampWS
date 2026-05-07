@@ -79,18 +79,13 @@ const CLUBS = [
   { id: "astronomy", name: "천문동아리", codeLabel: "B-ASTRO" }
 ] satisfies ClubConfig[];
 
-const BOOTHS: Booth[] = CLUBS.flatMap((club) =>
-  Array.from({ length: 10 }, (_, index) => {
-    const boothNumber = String(index + 1).padStart(2, "0");
-    return {
-      id: `${club.id}_booth_${boothNumber}`,
-      name: `${club.name} ${boothNumber}`,
-      clubName: club.name,
-      adminAccountIds: [],
-      active: true
-    };
-  })
-);
+const BOOTHS: Booth[] = CLUBS.map((club) => ({
+  id: `${club.id}_booth_01`,
+  name: club.name,
+  clubName: club.name,
+  adminAccountIds: [],
+  active: true
+}));
 
 let initPromise: Promise<void> | null = null;
 let writeQueue: Promise<unknown> = Promise.resolve();

@@ -2,6 +2,7 @@
 
 import jsQR from "jsqr";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { STAMP_REWARD_THRESHOLD } from "@/lib/stamp-config";
 import beanTeaImage from "../../public/rewards/bean-tea.png";
 import dalgonaImage from "../../public/rewards/dalgona.png";
 import icedTeaImage from "../../public/rewards/iced-tea.png";
@@ -487,7 +488,7 @@ async function renderTempPassCanvas(pass: TempPassView) {
   const qrImage = await loadCanvasImage(`/api/qr?value=${encodeURIComponent(publicQrValue(pass.qrToken))}`);
   context.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
 
-  drawCenteredText(context, "7개 완료 후 보상 부스 스캔", qrY + qrSize + 22, width, 22, 800);
+  drawCenteredText(context, `${STAMP_REWARD_THRESHOLD}개 완료 후 보상 부스 스캔`, qrY + qrSize + 22, width, 22, 800);
   drawCenteredText(context, `${pass.label} · 현장 임시권`, qrY + qrSize + 56, width, 16, 700);
 
   return canvas;
@@ -889,7 +890,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
         <div className="authTitle">
           <p className="eyebrow">과학의날</p>
           <h1>입장</h1>
-          <p>스탬프 7개부터 쿠폰.</p>
+          <p>스탬프 {STAMP_REWARD_THRESHOLD}개부터 쿠폰.</p>
         </div>
         <div className="segmented authModes">
           <button className={mode === "participant" ? "active" : ""} onClick={() => setMode("participant")} type="button">참가자</button>
@@ -943,7 +944,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
           </div>
           <div className="statusStrip">
             <div>
-              <strong>7개</strong>
+              <strong>{STAMP_REWARD_THRESHOLD}개</strong>
               <span>쿠폰</span>
             </div>
             <div>
@@ -1002,8 +1003,8 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
   const rewards = me.rewards || [];
   const couponReward = rewards.find((reward) => reward.id === me.coupon?.rewardId);
   const stamps = me.stamps || [];
-  const progress = Math.min(me.stats?.stampCount || 0, 7);
-  const remaining = Math.max(7 - progress, 0);
+  const progress = Math.min(me.stats?.stampCount || 0, STAMP_REWARD_THRESHOLD);
+  const remaining = Math.max(STAMP_REWARD_THRESHOLD - progress, 0);
   const latestStamp = [...stamps].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   const couponStatus = me.coupon
     ? me.coupon.status === "unused" ? "사용 가능" : "사용 완료"
@@ -1041,11 +1042,11 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
           <div>
             <p>{me.profile?.bio || "한 줄 소개 없음"}</p>
             <div className="progressLabel">
-              <strong>{progress}/7</strong>
+              <strong>{progress}/{STAMP_REWARD_THRESHOLD}</strong>
               <span>스탬프</span>
             </div>
             <div className="progressTrack">
-              <span style={{ width: `${(progress / 7) * 100}%` }} />
+              <span style={{ width: `${(progress / STAMP_REWARD_THRESHOLD) * 100}%` }} />
             </div>
           </div>
         </div>
@@ -1071,7 +1072,7 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
         <div className="sectionHeader">
           <div>
             <h2>쿠폰</h2>
-            <p>7개부터 선택.</p>
+            <p>{STAMP_REWARD_THRESHOLD}개부터 선택.</p>
           </div>
         </div>
         {me.coupon ? (
@@ -1103,7 +1104,7 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
               ))}
             </div>
             {error && <p className="errorText">{error}</p>}
-            <button className="primaryButton" disabled={(me.stats?.stampCount || 0) < 7} onClick={createCoupon} type="button">
+            <button className="primaryButton" disabled={(me.stats?.stampCount || 0) < STAMP_REWARD_THRESHOLD} onClick={createCoupon} type="button">
               변환
             </button>
           </>
@@ -1754,7 +1755,7 @@ function CodesPanel() {
       <div className="sectionHeader">
         <div>
           <h2>코드</h2>
-          <p>{showFullCode ? "동아리는 반복 가입." : "원문은 숨김."}</p>
+          <p>{showFullCode ? "동아리별 1계정." : "원문은 숨김."}</p>
         </div>
       </div>
       {error && <p className="errorText">{error}</p>}
@@ -1786,8 +1787,8 @@ function CodesPanel() {
                       {showFullCode && <td className="codeText">{code.fullCode || "seed 없음"}</td>}
                       <td>{code.role}</td>
                       <td>{code.targetName}</td>
-                      <td><span className={`pill ${code.revoked ? "done" : code.multiUse ? "ok" : code.used ? "done" : "ok"}`}>{code.revoked ? "비활성" : code.multiUse ? "반복 가능" : code.used ? "사용됨" : "미사용"}</span></td>
-                      <td>{code.multiUse ? `${code.useCount || 0}개` : code.used ? "1개" : "0개"}</td>
+                      <td><span className={`pill ${code.revoked ? "done" : code.used ? "done" : "ok"}`}>{code.revoked ? "비활성" : code.used ? "사용됨" : "미사용"}</span></td>
+                      <td>{code.useCount || 0}개</td>
                       <td>{formatTime(code.usedAt)}</td>
                       <td>{code.usedByDisplayName || "-"}</td>
                     </tr>
@@ -1805,7 +1806,7 @@ function CodesPanel() {
 function tempPassStatus(pass: TempPassView) {
   if (pass.status === "redeemed") return "지급 완료";
   if (pass.status === "voided") return "중지";
-  if (pass.stampCount >= 7) return "보상 가능";
+  if (pass.stampCount >= STAMP_REWARD_THRESHOLD) return "보상 가능";
   return "진행";
 }
 
@@ -1954,7 +1955,7 @@ function TempPassPanel() {
             ) : (
               <div className="usedQr">완료</div>
             )}
-            <p>스탬프 {pass.stampCount}/7</p>
+            <p>스탬프 {pass.stampCount}/{STAMP_REWARD_THRESHOLD}</p>
             {pass.redeemedRewardId && <p>{rewardNameById(pass.redeemedRewardId)}</p>}
             <small>{pass.redeemedAt ? formatTime(pass.redeemedAt) : formatTime(pass.createdAt)}</small>
             <button className="dangerButton" onClick={() => deletePass(pass)} type="button">삭제</button>
@@ -2803,9 +2804,9 @@ function Leaderboard() {
             <div className="miniAvatar">{row.avatarStampImageDataUrl ? <img src={row.avatarStampImageDataUrl} alt="" /> : <span>{row.displayName.slice(0, 2)}</span>}</div>
             <div>
               <h3>{row.displayName}</h3>
-              <p>{row.bio || (row.completed ? `완료 ${formatTime(row.completedSevenAt)}` : `${row.stampCount}/7 진행`)}</p>
+              <p>{row.bio || (row.completed ? `완료 ${formatTime(row.completedSevenAt)}` : `${row.stampCount}/${STAMP_REWARD_THRESHOLD} 진행`)}</p>
               <div className="speedMeta">
-                <span>스탬프 {row.stampCount}/7</span>
+                <span>스탬프 {row.stampCount}/{STAMP_REWARD_THRESHOLD}</span>
                 {row.completed ? (
                   <>
                     {row.rank === 1 ? <span>기준 기록</span> : <span>1위 +{formatDuration(row.behindFirstMs)}</span>}
@@ -2816,7 +2817,7 @@ function Leaderboard() {
                 )}
               </div>
             </div>
-            <div className={`scoreBox ${row.completed ? "" : "pending"}`}>{row.completed ? formatDuration(row.durationMs || 0) : `${row.stampCount}/7`}</div>
+            <div className={`scoreBox ${row.completed ? "" : "pending"}`}>{row.completed ? formatDuration(row.durationMs || 0) : `${row.stampCount}/${STAMP_REWARD_THRESHOLD}`}</div>
           </div>
         ))}
         {rows.length === 0 && <p className="emptyText">기록 없음</p>}
@@ -2853,7 +2854,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
       showStampEffect({
         mode: "receive",
         title: "스탬프 받음",
-        detail: latestStamp ? `${latestStamp.boothName} · ${nextStampCount}/7` : `${nextStampCount}/7`,
+        detail: latestStamp ? `${latestStamp.boothName} · ${nextStampCount}/${STAMP_REWARD_THRESHOLD}` : `${nextStampCount}/${STAMP_REWARD_THRESHOLD}`,
         imageDataUrl: latestStamp?.stampImageDataUrl
       });
     }
@@ -2993,11 +2994,11 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
         method: "POST",
         body: JSON.stringify({ token, boothId: booth.id })
       });
-      setToast(`${result.participantName} 스탬프 지급 완료 (${result.stampCount}/7)`);
+      setToast(`${result.participantName} 스탬프 지급 완료 (${result.stampCount}/${STAMP_REWARD_THRESHOLD})`);
       showStampEffect({
         mode: "give",
         title: "지급 완료",
-        detail: `${result.participantName} · ${result.stampCount}/7`,
+        detail: `${result.participantName} · ${result.stampCount}/${STAMP_REWARD_THRESHOLD}`,
         imageDataUrl: booth.stampImageDataUrl
       });
       await refresh();

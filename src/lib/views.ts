@@ -1,5 +1,6 @@
 import { createCouponQrToken, createParticipantQrToken, defaultStampDataUrl } from "./crypto";
 import { boothForAccount, managedBoothsForAccount } from "./booth-access";
+import { STAMP_REWARD_THRESHOLD } from "./stamp-config";
 import type { Account, Profile, StampDb, UserStats } from "./types";
 
 export function accountView(account: Account) {
@@ -71,6 +72,17 @@ export async function buildMePayload(account: Account, db: StampDb) {
     const stats = db.userStats.find((item) => item.accountId === account.id) || defaultStats(account.id);
     const coupon = db.coupons.find((item) => item.participantAccountId === account.id);
     const avatarStamp = profile.avatarStampId ? stamps.find((stamp) => stamp.id === profile.avatarStampId) : undefined;
+    const stampsAscending = [...stamps].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const computedStats = {
+      ...stats,
+      stampCount: stamps.length,
+      uniqueBoothCount: new Set(stamps.map((stamp) => stamp.boothId)).size,
+      couponEligible: stamps.length >= STAMP_REWARD_THRESHOLD,
+      couponClaimed: Boolean(coupon) || stats.couponClaimed,
+      firstStampAt: stats.firstStampAt || stampsAscending[0]?.createdAt,
+      lastStampAt: stats.lastStampAt || stampsAscending[stampsAscending.length - 1]?.createdAt,
+      completedSevenAt: stampsAscending[STAMP_REWARD_THRESHOLD - 1]?.createdAt || stats.completedSevenAt
+    };
 
     return {
       ...base,
@@ -84,7 +96,7 @@ export async function buildMePayload(account: Account, db: StampDb) {
         avatarStampImageDataUrl: avatarStamp?.stampImageDataUrl
       },
       stamps,
-      stats,
+      stats: computedStats,
       coupon: coupon
         ? {
             ...coupon,

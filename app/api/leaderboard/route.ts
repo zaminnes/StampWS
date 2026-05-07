@@ -3,6 +3,7 @@ import { requireCurrentSession } from "@/lib/auth";
 import { defaultStampDataUrl } from "@/lib/crypto";
 import { readDb } from "@/lib/db";
 import { jsonError, jsonOk } from "@/lib/http";
+import { STAMP_REWARD_THRESHOLD } from "@/lib/stamp-config";
 import { defaultProfile, defaultStats } from "@/lib/views";
 
 export const runtime = "nodejs";
@@ -24,7 +25,7 @@ function speedrunRow(params: {
   completedSevenAt?: string;
   lastStampAt?: string;
 }) {
-  const completed = Boolean(params.firstStampAt && params.completedSevenAt && params.stampCount >= 7);
+  const completed = Boolean(params.firstStampAt && params.completedSevenAt && params.stampCount >= STAMP_REWARD_THRESHOLD);
   return {
     ...params,
     completed,
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
           .filter((stamp) => stamp.participantAccountId === account.id && !stamp.voided)
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
         const firstStampAt = stats.firstStampAt || participantStamps[0]?.createdAt;
-        const completedSevenAt = stats.completedSevenAt || participantStamps[6]?.createdAt;
+        const completedSevenAt = participantStamps[STAMP_REWARD_THRESHOLD - 1]?.createdAt || stats.completedSevenAt;
         const avatarStamp = profile.avatarStampId
           ? db.stamps.find((stamp) => stamp.id === profile.avatarStampId && !stamp.voided)
           : participantStamps[participantStamps.length - 1];
