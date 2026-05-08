@@ -300,11 +300,11 @@
       ],
       boss: [
         { at: 0.00, end: 10.20, kind: "opening", sub: "우신고에서 / 스탬프제가?" },
-        { at: 10.20, end: 18.10, kind: "entry", sub: "학번 / 입장 / 내 QR" },
-        { at: 18.10, end: 39.84, kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
-        { at: 39.84, end: 52.28, kind: "stamp", sub: "찍으면 바로 보여" },
-        { at: 52.28, end: 58.66, kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
-        { at: 58.66, end: 69.02, kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
+        { at: 10.20, end: 29.14, kind: "entry", sub: "학번 / 입장 / 내 QR" },
+        { at: 29.14, end: 39.84, kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
+        { at: 39.84, end: 52.16, kind: "stamp", sub: "찍으면 바로 보여" },
+        { at: 52.16, end: 58.70, kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
+        { at: 58.70, end: 69.02, kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
         { at: 69.02, end: 84.08, kind: "redeem", sub: "우신고에서 스탬프제가?" },
         { at: 84.08, end: 91.18, kind: "rewards", sub: "달고나 / 콩가루차 / 팝콘 / 아이스티" },
         { at: 91.18, end: 100.40, kind: "end", sub: "찍고, 모으고, 받자" },
@@ -443,41 +443,41 @@
     const bossLyricCues = [
       { at: 0.00, end: 2.28, text: "우신고에서", size: 136 },
       { at: 2.28, end: 9.86, text: "스탬프제가?", size: 156 },
-      { at: 11.80, end: 13.58, text: "학번", size: 136 },
-      { at: 13.58, end: 15.26, text: "입장", size: 136 },
-      { at: 15.26, end: 18.10, text: "내 QR", size: 134 },
-      { at: 18.10, end: 20.10, text: "한 번", size: 120 },
-      { at: 20.10, end: 21.70, text: "찍어", size: 132 },
-      { at: 21.70, end: 23.58, text: "눈앞이", size: 112 },
-      { at: 23.58, end: 25.70, text: "바뀌어", size: 114 },
-      { at: 25.70, end: 28.40, text: "사라지기", size: 100 },
-      { at: 28.40, end: 30.60, text: "전에", size: 120 },
-      { at: 30.60, end: 35.30, text: "딱", size: 154 },
-      { at: 35.30, end: 39.84, text: "맞춰", size: 138 },
+      { at: 27.50, end: 28.12, text: "학번", size: 136 },
+      { at: 28.12, end: 28.52, text: "입장", size: 136 },
+      { at: 28.52, end: 29.14, text: "내 QR", size: 134 },
+      { at: 29.14, end: 30.84, text: "한 번", size: 120 },
+      { at: 30.84, end: 31.64, text: "찍어", size: 132 },
+      { at: 31.64, end: 32.80, text: "눈앞이", size: 112 },
+      { at: 32.80, end: 33.58, text: "바뀌어", size: 114 },
+      { at: 33.58, end: 35.06, text: "사라지기", size: 100 },
+      { at: 35.06, end: 35.58, text: "전에", size: 120 },
+      { at: 37.32, end: 37.80, text: "딱", size: 154 },
+      { at: 37.98, end: 38.68, text: "맞춰", size: 138 },
       { at: 39.84, end: 40.84, text: "우신고에서", size: 122 },
       { at: 40.84, end: 42.54, text: "스탬프제가?", size: 136 },
       { at: 42.54, end: 44.58, text: "우신고에서", size: 122 },
       { at: 44.58, end: 46.90, text: "스탬프제가?", size: 136 },
-      { at: 47.68, end: 49.54, text: "찍으면", size: 120 },
-      { at: 49.54, end: 52.28, text: "바로 보여", size: 116 },
-      { at: 52.28, end: 55.84, text: "다섯 개", size: 128 },
-      { at: 55.84, end: 56.98, text: "쿠폰", size: 140 },
+      { at: 47.64, end: 49.04, text: "찍으면", size: 120 },
+      { at: 49.04, end: 52.16, text: "바로 보여", size: 116 },
+      { at: 54.52, end: 56.26, text: "다섯 개", size: 128 },
+      { at: 56.26, end: 56.98, text: "쿠폰", size: 140 },
       { at: 56.98, end: 58.18, text: "하나만", size: 130 },
-      { at: 58.18, end: 58.66, text: "선택", size: 140 },
-      { at: 59.28, end: 61.04, text: "손이 먼저", size: 108 },
-      { at: 61.04, end: 61.86, text: "가", size: 142 },
-      { at: 63.02, end: 64.08, text: "눈이 먼저", size: 108 },
-      { at: 64.08, end: 64.54, text: "가", size: 142 },
-      { at: 64.54, end: 65.42, text: "오늘은", size: 116 },
-      { at: 65.42, end: 66.06, text: "달라", size: 130 },
-      { at: 66.06, end: 67.62, text: "다", size: 150 },
-      { at: 67.62, end: 69.02, text: "받아", size: 140 },
-      { at: 71.58, end: 72.98, text: "우신고에서", size: 124 },
-      { at: 72.98, end: 74.38, text: "스탬프제가?", size: 138 },
-      { at: 74.38, end: 76.46, text: "우신고에서", size: 124 },
-      { at: 76.46, end: 78.90, text: "스탬프제가?", size: 138 },
-      { at: 79.58, end: 81.16, text: "찍으면", size: 122 },
-      { at: 81.16, end: 84.08, text: "바로 보여", size: 118 },
+      { at: 58.18, end: 58.70, text: "선택", size: 140 },
+      { at: 58.70, end: 61.02, text: "손이 먼저", size: 108 },
+      { at: 61.02, end: 62.00, text: "가", size: 142 },
+      { at: 62.76, end: 64.06, text: "눈이 먼저", size: 108 },
+      { at: 64.06, end: 64.56, text: "가", size: 142 },
+      { at: 64.56, end: 65.42, text: "오늘은", size: 116 },
+      { at: 65.42, end: 66.08, text: "달라", size: 130 },
+      { at: 66.08, end: 67.08, text: "다", size: 150 },
+      { at: 67.08, end: 68.92, text: "받아", size: 140 },
+      { at: 71.56, end: 72.96, text: "우신고에서", size: 124 },
+      { at: 72.96, end: 74.36, text: "스탬프제가?", size: 138 },
+      { at: 74.36, end: 76.48, text: "우신고에서", size: 124 },
+      { at: 76.48, end: 78.90, text: "스탬프제가?", size: 138 },
+      { at: 78.90, end: 80.74, text: "찍으면", size: 122 },
+      { at: 80.74, end: 83.96, text: "바로 보여", size: 118 },
       { at: 86.56, end: 87.96, text: "달고나", size: 116 },
       { at: 88.22, end: 89.30, text: "콩가루차", size: 114 },
       { at: 89.52, end: 90.08, text: "팝콘", size: 124 },
@@ -514,15 +514,15 @@
     let lyricCues = buildLyricCues();
 
     const performerVideos = {
-      sw: createOverlayVideo("../../SW.mp4"),
-      james: createOverlayVideo("../../James.mp4")
+      sw: createOverlayVideo("./SW-cutout.webm", "./SW.mp4"),
+      james: createOverlayVideo("./James-cutout.webm", "./James.mp4")
     };
 
     const rewardAssets = [
-      { name: "달고나", sub: "화학", src: "../../public/rewards/dalgona.png", color: "#f59e0b", img: createImage("../../public/rewards/dalgona.png") },
-      { name: "콩가루차", sub: "생명", src: "../../public/rewards/bean-tea.png", color: "#22c55e", img: createImage("../../public/rewards/bean-tea.png") },
-      { name: "팝콘", sub: "퀘이사", src: "../../public/rewards/popcorn.png", color: "#facc15", img: createImage("../../public/rewards/popcorn.png") },
-      { name: "아이스티", sub: "알파고", src: "../../public/rewards/iced-tea.png", color: "#60a5fa", img: createImage("../../public/rewards/iced-tea.png") }
+      { name: "달고나", sub: "화학", src: "../../../../../public/rewards/dalgona.png", color: "#f59e0b", img: createImage("../../../../../public/rewards/dalgona.png") },
+      { name: "콩가루차", sub: "생명", src: "../../../../../public/rewards/bean-tea.png", color: "#22c55e", img: createImage("../../../../../public/rewards/bean-tea.png") },
+      { name: "팝콘", sub: "퀘이사", src: "../../../../../public/rewards/popcorn.png", color: "#facc15", img: createImage("../../../../../public/rewards/popcorn.png") },
+      { name: "아이스티", sub: "알파고", src: "../../../../../public/rewards/iced-tea.png", color: "#60a5fa", img: createImage("../../../../../public/rewards/iced-tea.png") }
     ];
 
     function clamp(v, min = 0, max = 1) {
@@ -547,14 +547,24 @@
       return BEAT_OFFSET + index * BEAT;
     }
 
-    function createOverlayVideo(src) {
+    function createOverlayVideo(src, fallbackSrc = "") {
       const video = document.createElement("video");
       video.src = src;
+      video.dataset.keyed = src.endsWith(".webm") ? "1" : "0";
       video.muted = true;
       video.loop = true;
       video.playsInline = true;
       video.preload = "auto";
       video.style.display = "none";
+      if (fallbackSrc) {
+        video.addEventListener("error", () => {
+          if (video.dataset.fallbackLoaded === "1") return;
+          video.dataset.fallbackLoaded = "1";
+          video.dataset.keyed = "0";
+          video.src = fallbackSrc;
+          video.load();
+        });
+      }
       document.body.appendChild(video);
       return video;
     }
@@ -1274,7 +1284,7 @@
 
     function drawVideoCutout(video, cx, cy, w, h, alpha, rotation, scale, mirror = false) {
       if (!video || video.readyState < 2) return;
-      const keyedFrame = drawKeyedVideoFrame(video, w, h);
+      const keyedFrame = video.dataset.keyed === "1" ? video : drawKeyedVideoFrame(video, w, h);
       const boss = currentVersionKey === "boss";
       ctx.save();
       ctx.globalAlpha = alpha;

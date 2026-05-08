@@ -35,6 +35,14 @@ const ASSETS = {
   "James.mp4": {
     file: path.join(ASSET_DIR, "James.mp4"),
     contentType: "video/mp4"
+  },
+  "SW-cutout.webm": {
+    file: path.join(ASSET_DIR, "SW-cutout.webm"),
+    contentType: "video/webm"
+  },
+  "James-cutout.webm": {
+    file: path.join(ASSET_DIR, "James-cutout.webm"),
+    contentType: "video/webm"
   }
 } as const;
 

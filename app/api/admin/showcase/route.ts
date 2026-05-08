@@ -26,9 +26,11 @@ function serverShowcaseHtml(html: string, song: string) {
     .replaceAll("./stampws-audio-boss.mp3", "/api/admin/showcase/assets?name=stampws-audio-boss.mp3")
     .replaceAll("./stampws-audio-classic.mp3", "/api/admin/showcase/assets?name=stampws-audio-classic.mp3")
     .replaceAll("./stampws-audio.mp3", "/api/admin/showcase/assets?name=stampws-audio.mp3")
-    .replaceAll("../../SW.mp4", "/api/admin/showcase/assets?name=SW.mp4")
-    .replaceAll("../../James.mp4", "/api/admin/showcase/assets?name=James.mp4")
-    .replaceAll("../../public/rewards/", "/rewards/")
+    .replaceAll("./SW-cutout.webm", "/api/admin/showcase/assets?name=SW-cutout.webm")
+    .replaceAll("./James-cutout.webm", "/api/admin/showcase/assets?name=James-cutout.webm")
+    .replaceAll("./SW.mp4", "/api/admin/showcase/assets?name=SW.mp4")
+    .replaceAll("./James.mp4", "/api/admin/showcase/assets?name=James.mp4")
+    .replaceAll("../../../../../public/rewards/", "/rewards/")
     .replaceAll("http://127.0.0.1:4174 로 열기", "총괄 창에서 다시 열기");
 }
 
