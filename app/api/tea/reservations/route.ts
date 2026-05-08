@@ -24,8 +24,10 @@ function sanitizeNote(value: string) {
 
 function normalizeSerialCommand(value?: string) {
   const command = (value || TEA_DEFAULT_COMMAND).normalize("NFKC").replace(/[^\w,.-]/g, "").toUpperCase().slice(0, 40);
-  if (!/^(T|FORCE),\d{1,3},\d{1,3}$/.test(command)) {
-    throw new HttpError(400, "시리얼 명령은 T,15,20 형식으로 입력하세요.");
+  const valid = /^(T|FORCE),\d{1,3},\d{1,3}(,\d{1,3})?$/.test(command) ||
+    /^(D3|FORCE_D3|DRINK3),\d{1,3},\d{1,3}$/.test(command);
+  if (!valid) {
+    throw new HttpError(400, "시리얼 명령은 T,15,20 또는 D3,15,20 형식으로 입력하세요.");
   }
   return command;
 }

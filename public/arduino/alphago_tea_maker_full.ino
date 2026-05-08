@@ -12,12 +12,14 @@ const int dirPin = 6;
 const int enablePin = 5;
 const int waterPump = 4;
 const int icedTeaPump = 8;
+const int thirdDrinkPump = 7;
 const int servoPin = 2;
 const int lightSensor = A0;
 const int buttonPin = 3;
 
 const int defaultWaterSeconds = 15;
 const int defaultTeaSeconds = 20;
+const int defaultThirdDrinkSeconds = 20;
 const int defaultLowerSteps = 2000;
 const int defaultLiftSteps = 2500;
 int cupThreshold = 500;
@@ -44,6 +46,14 @@ void lcdPrint(String line1, String line2) {
   lcd.print(line2.substring(0, 16));
 }
 
+void stopOutputs() {
+  digitalWrite(waterPump, LOW);
+  digitalWrite(icedTeaPump, LOW);
+  digitalWrite(thirdDrinkPump, LOW);
+  digitalWrite(enablePin, HIGH);
+  mixerServo.write(90);
+}
+
 void emergencyStop() {
   isEmergency = true;
 }
@@ -54,10 +64,7 @@ bool cupPresent() {
 
 bool checkEmergency() {
   if (!isEmergency) return false;
-  digitalWrite(waterPump, LOW);
-  digitalWrite(icedTeaPump, LOW);
-  digitalWrite(enablePin, HIGH);
-  mixerServo.write(90);
+  stopOutputs();
   isBrewing = false;
   lcdPrint("EMERGENCY STOP", "Resetting");
   reportStatus("EMERGENCY");
@@ -87,6 +94,38 @@ void moveStepper(bool down, int steps) {
     delayMicroseconds(800);
   }
   digitalWrite(enablePin, HIGH);
+}
+
+bool runTimedPumps(int waterMs, int teaMs, int thirdDrinkMs) {
+  unsigned long startedAt = millis();
+  bool waterOn = waterMs > 0;
+  bool teaOn = teaMs > 0;
+  bool thirdOn = thirdDrinkMs > 0;
+
+  digitalWrite(waterPump, waterOn ? HIGH : LOW);
+  digitalWrite(icedTeaPump, teaOn ? HIGH : LOW);
+  digitalWrite(thirdDrinkPump, thirdOn ? HIGH : LOW);
+
+  while (waterOn || teaOn || thirdOn) {
+    if (checkEmergency()) return true;
+    unsigned long elapsed = millis() - startedAt;
+    if (waterOn && elapsed >= (unsigned long)waterMs) {
+      digitalWrite(waterPump, LOW);
+      waterOn = false;
+    }
+    if (teaOn && elapsed >= (unsigned long)teaMs) {
+      digitalWrite(icedTeaPump, LOW);
+      teaOn = false;
+    }
+    if (thirdOn && elapsed >= (unsigned long)thirdDrinkMs) {
+      digitalWrite(thirdDrinkPump, LOW);
+      thirdOn = false;
+    }
+    delay(30);
+  }
+
+  stopOutputs();
+  return false;
 }
 
 void mixDrink() {
@@ -126,7 +165,7 @@ void mixDrink() {
   moveStepper(false, defaultLiftSteps);
 }
 
-void makeIcedTea(int waterSeconds, int teaSeconds, bool force) {
+void makeDrink(String drinkName, int waterSeconds, int teaSeconds, int thirdDrinkSeconds, bool force) {
   if (isBrewing) {
     reportStatus("ERROR:BUSY");
     return;
@@ -138,37 +177,16 @@ void makeIcedTea(int waterSeconds, int teaSeconds, bool force) {
   }
 
   isBrewing = true;
-  lcdPrint("Iced Tea", "Brewing");
+  lcdPrint(drinkName, "Brewing");
   reportStatus("DISPENSING");
 
-  int waterMs = constrain(waterSeconds, 1, 90) * 1000;
-  int teaMs = constrain(teaSeconds, 1, 90) * 1000;
-  int bothMs = min(waterMs, teaMs);
-  int waterExtra = waterMs - bothMs;
-  int teaExtra = teaMs - bothMs;
-
-  digitalWrite(waterPump, HIGH);
-  digitalWrite(icedTeaPump, HIGH);
-  if (safeDelay(bothMs)) return;
-  digitalWrite(waterPump, LOW);
-  digitalWrite(icedTeaPump, LOW);
-
-  if (waterExtra > 0) {
-    digitalWrite(waterPump, HIGH);
-    if (safeDelay(waterExtra)) return;
-    digitalWrite(waterPump, LOW);
-  }
-  if (teaExtra > 0) {
-    digitalWrite(icedTeaPump, HIGH);
-    if (safeDelay(teaExtra)) return;
-    digitalWrite(icedTeaPump, LOW);
-  }
+  int waterMs = constrain(waterSeconds, 0, 90) * 1000;
+  int teaMs = constrain(teaSeconds, 0, 90) * 1000;
+  int thirdDrinkMs = constrain(thirdDrinkSeconds, 0, 90) * 1000;
+  if (runTimedPumps(waterMs, teaMs, thirdDrinkMs)) return;
 
   if (!checkEmergency()) mixDrink();
-  digitalWrite(waterPump, LOW);
-  digitalWrite(icedTeaPump, LOW);
-  digitalWrite(enablePin, HIGH);
-  mixerServo.write(90);
+  stopOutputs();
 
   if (!isEmergency) {
     lcdPrint("Done", "Enjoy :)");
@@ -178,6 +196,14 @@ void makeIcedTea(int waterSeconds, int teaSeconds, bool force) {
     reportStatus("SYSTEM_READY");
   }
   isBrewing = false;
+}
+
+void makeIcedTea(int waterSeconds, int teaSeconds, int thirdDrinkSeconds, bool force) {
+  makeDrink("Iced Tea", waterSeconds, teaSeconds, thirdDrinkSeconds, force);
+}
+
+void makeThirdDrink(int waterSeconds, int thirdDrinkSeconds, bool force) {
+  makeDrink("Drink 3", waterSeconds, 0, thirdDrinkSeconds, force);
 }
 
 int commandPart(String command, int index, int fallback) {
@@ -232,6 +258,64 @@ void runStepperCommand(String direction, int steps) {
   reportStatus("SYSTEM_READY");
 }
 
+void cleanMachine(int waterSeconds, bool force) {
+  if (isBrewing) {
+    reportStatus("ERROR:BUSY");
+    return;
+  }
+  if (!force && !cupPresent()) {
+    reportStatus("ERROR:NO_CUP");
+    lcdPrint("Place Cup", "For Clean");
+    return;
+  }
+
+  isBrewing = true;
+  lcdPrint("Cleaning", "Water Flush");
+  reportStatus("CLEANING");
+  digitalWrite(waterPump, HIGH);
+  if (safeDelay(constrain(waterSeconds, 1, 120) * 1000)) return;
+  digitalWrite(waterPump, LOW);
+
+  if (!checkEmergency()) mixDrink();
+  stopOutputs();
+  isBrewing = false;
+
+  lcdPrint("Clean Done", "Ready");
+  reportStatus("CLEAN_COMPLETE");
+  safeDelay(1200);
+  lcdPrint("Tea Maker Ready", "Place Cup");
+  reportStatus("SYSTEM_READY");
+}
+
+void cleanAllHoses(int seconds, bool force) {
+  if (isBrewing) {
+    reportStatus("ERROR:BUSY");
+    return;
+  }
+  if (!force && !cupPresent()) {
+    reportStatus("ERROR:NO_CUP");
+    lcdPrint("Place Cup", "For Clean");
+    return;
+  }
+
+  isBrewing = true;
+  lcdPrint("Cleaning", "All Hoses");
+  reportStatus("CLEANING_ALL");
+  if (runTimedPumps(
+    constrain(seconds, 1, 120) * 1000,
+    constrain(seconds, 1, 120) * 1000,
+    constrain(seconds, 1, 120) * 1000
+  )) return;
+
+  stopOutputs();
+  isBrewing = false;
+  lcdPrint("Clean Done", "Ready");
+  reportStatus("CLEAN_COMPLETE");
+  safeDelay(1200);
+  lcdPrint("Tea Maker Ready", "Place Cup");
+  reportStatus("SYSTEM_READY");
+}
+
 void handleCommand(String command) {
   command.trim();
   command.toUpperCase();
@@ -262,6 +346,10 @@ void handleCommand(String command) {
     runSinglePump(icedTeaPump, commandPart(command, 1, defaultTeaSeconds), "DISPENSING:TEA", command.startsWith("FORCE_TEA,"));
     return;
   }
+  if (command.startsWith("THIRD,") || command.startsWith("DRINK3_PUMP,") || command.startsWith("FORCE_THIRD,")) {
+    runSinglePump(thirdDrinkPump, commandPart(command, 1, defaultThirdDrinkSeconds), "DISPENSING:DRINK3", command.startsWith("FORCE_THIRD,"));
+    return;
+  }
   if (command.startsWith("SERVO,")) {
     mixerServo.write(constrain(commandPart(command, 1, 90), 0, 180));
     reportStatus("SERVO_UPDATED");
@@ -269,6 +357,22 @@ void handleCommand(String command) {
   }
   if (command.startsWith("STEPPER,")) {
     runStepperCommand(commandTextPart(command, 1, "UP"), commandPart(command, 2, 800));
+    return;
+  }
+  if (command == "CLEAN" || command == "RINSE" || command == "FORCE_CLEAN") {
+    cleanMachine(10, command == "FORCE_CLEAN");
+    return;
+  }
+  if (command == "CLEAN_ALL" || command == "FORCE_CLEAN_ALL") {
+    cleanAllHoses(10, command == "FORCE_CLEAN_ALL");
+    return;
+  }
+  if (command.startsWith("CLEAN,") || command.startsWith("RINSE,") || command.startsWith("FORCE_CLEAN,")) {
+    cleanMachine(commandPart(command, 1, 10), command.startsWith("FORCE_CLEAN,"));
+    return;
+  }
+  if (command.startsWith("CLEAN_ALL,") || command.startsWith("FORCE_CLEAN_ALL,")) {
+    cleanAllHoses(commandPart(command, 1, 10), command.startsWith("FORCE_CLEAN_ALL,"));
     return;
   }
   if (command == "MIX") {
@@ -285,7 +389,15 @@ void handleCommand(String command) {
     bool force = command.startsWith("FORCE,");
     int waterSeconds = commandPart(command, 1, defaultWaterSeconds);
     int teaSeconds = commandPart(command, 2, defaultTeaSeconds);
-    makeIcedTea(waterSeconds, teaSeconds, force);
+    int thirdDrinkSeconds = commandPart(command, 3, 0);
+    makeIcedTea(waterSeconds, teaSeconds, thirdDrinkSeconds, force);
+    return;
+  }
+  if (command.startsWith("D3,") || command.startsWith("FORCE_D3,") || command.startsWith("DRINK3,")) {
+    bool force = command.startsWith("FORCE_D3,");
+    int waterSeconds = commandPart(command, 1, defaultWaterSeconds);
+    int thirdDrinkSeconds = commandPart(command, 2, defaultThirdDrinkSeconds);
+    makeThirdDrink(waterSeconds, thirdDrinkSeconds, force);
     return;
   }
 
@@ -299,11 +411,13 @@ void setup() {
   pinMode(enablePin, OUTPUT);
   pinMode(waterPump, OUTPUT);
   pinMode(icedTeaPump, OUTPUT);
+  pinMode(thirdDrinkPump, OUTPUT);
   pinMode(buttonPin, INPUT_PULLUP);
 
   digitalWrite(enablePin, HIGH);
   digitalWrite(waterPump, LOW);
   digitalWrite(icedTeaPump, LOW);
+  digitalWrite(thirdDrinkPump, LOW);
 
   mixerServo.attach(servoPin);
   mixerServo.write(90);
@@ -351,7 +465,7 @@ void loop() {
 
   if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
     reportStatus("RFID_DETECTED");
-    makeIcedTea(defaultWaterSeconds, defaultTeaSeconds, false);
+    makeIcedTea(defaultWaterSeconds, defaultTeaSeconds, 0, false);
     rfid.PICC_HaltA();
   }
 

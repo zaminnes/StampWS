@@ -430,12 +430,19 @@ function teaSourceLabel(reservation: Pick<TeaReservationView, "source" | "priori
   return "온라인";
 }
 
-function newArduinoButtonDraft(): ArduinoButtonView {
+function arduinoCommandScript(command: string) {
+  return `void runButton() {
+  Serial.println("${command}");
+}
+`;
+}
+
+function newArduinoButtonDraft(label = "새 버튼", command = TEA_DEFAULT_COMMAND): ArduinoButtonView {
   const now = new Date().toISOString();
   return {
     id: `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    label: "새 버튼",
-    scriptText: DEFAULT_ARDUINO_BUTTON_SCRIPT,
+    label,
+    scriptText: arduinoCommandScript(command),
     createdAt: now,
     updatedAt: now
   };
@@ -489,6 +496,12 @@ function parseArduinoButtonScript(scriptText: string) {
   return steps;
 }
 
+function isTeaCupCommand(command: string) {
+  const clean = command.normalize("NFKC").trim().toUpperCase();
+  return /^(T|FORCE),\d{1,3},\d{1,3}(,\d{1,3})?$/.test(clean) ||
+    /^(D3|FORCE_D3|DRINK3),\d{1,3},\d{1,3}$/.test(clean);
+}
+
 function roleLabel(role?: Role) {
   if (role === "participant") return "참가자";
   if (role === "boothAdmin") return "부스";
@@ -499,10 +512,6 @@ function roleLabel(role?: Role) {
 
 const PRINTER_WIDTH = 576;
 const TEA_DEFAULT_COMMAND = "T,15,20";
-const DEFAULT_ARDUINO_BUTTON_SCRIPT = `void runButton() {
-  Serial.println("${TEA_DEFAULT_COMMAND}");
-}
-`;
 
 let printerConnected = false;
 const writeCharRef: { current: any } = { current: null };
@@ -2734,9 +2743,10 @@ function TeaMakerPanel() {
     setBusy(true);
     setMessage("");
     try {
-      if (stockCount <= 0) throw new Error("아이스티 재고가 없습니다.");
+      const shouldCountStock = isTeaCupCommand(serialCommand);
+      if (shouldCountStock && stockCount <= 0) throw new Error("아이스티 재고가 없습니다.");
       await writeSerial(serialCommand);
-      await updateStock("decrement");
+      if (shouldCountStock) await updateStock("decrement");
       setMessage("즉시 제조");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "제조 실패");
@@ -2820,6 +2830,10 @@ function TeaMakerPanel() {
     setArduinoButtons((current) => [...current, newArduinoButtonDraft()]);
   }
 
+  function addArduinoPresetButton(label: string, command: string) {
+    setArduinoButtons((current) => [...current, newArduinoButtonDraft(label, command)]);
+  }
+
   function deleteArduinoButton(id: string) {
     setArduinoButtons((current) => current.filter((button) => button.id !== id));
   }
@@ -2860,7 +2874,8 @@ function TeaMakerPanel() {
           await writeSerial(step.command);
         }
       }
-      if (steps.some((step) => step.type === "send" && /^(T|FORCE),\d{1,3},\d{1,3}$/.test(step.command))) {
+      const cupCount = steps.filter((step) => step.type === "send" && isTeaCupCommand(step.command)).length;
+      for (let index = 0; index < cupCount; index += 1) {
         await updateStock("decrement");
       }
       setMessage(`${button.label} 실행`);
@@ -2953,6 +2968,9 @@ function TeaMakerPanel() {
             </div>
             <div className="firmwareActions">
               <button className="secondaryButton" onClick={addArduinoButton} type="button">추가</button>
+              <button className="secondaryButton" onClick={() => addArduinoPresetButton("청소", "CLEAN,10")} type="button">청소</button>
+              <button className="secondaryButton" onClick={() => addArduinoPresetButton("전체청소", "CLEAN_ALL,10")} type="button">전체청소</button>
+              <button className="secondaryButton" onClick={() => addArduinoPresetButton("3음료", "D3,15,20")} type="button">3음료</button>
               <button className="primaryButton" disabled={busy} onClick={saveArduinoButtons} type="button">저장</button>
             </div>
           </div>
@@ -2979,7 +2997,7 @@ function TeaMakerPanel() {
                     value={button.scriptText}
                     onChange={(event) => updateArduinoButton(button.id, { scriptText: event.target.value })}
                   />
-                  <p className="hintText">C++ 주입 아님. 펌웨어 명령 전송: T,15,20 / WATER,3 / TEA,3 / SERVO,90 / STEPPER,DOWN,2000 / MIX.</p>
+                  <p className="hintText">C++ 주입 아님. 명령 전송: T,15,20 / D3,15,20 / WATER,3 / TEA,3 / THIRD,3 / CLEAN,10 / CLEAN_ALL,10.</p>
                 </div>
               );
             })}
