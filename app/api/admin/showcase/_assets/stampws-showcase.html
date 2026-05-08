@@ -211,7 +211,7 @@
         duration: ORIGINAL_DURATION,
         totalBeats: 240,
         beatOffset: 0.464,
-        lyricStart: 6.5
+        lyricStart: 0
       }
     };
 
@@ -273,6 +273,19 @@
     }
 
     const versionScenes = {
+      original: [
+        { at: 0.00, end: 3.06, kind: "opening", sub: "우신고에서 / 스탬프제가?" },
+        { at: 3.06, end: 6.54, kind: "entry", sub: "학번 / 입장 / 내 QR" },
+        { at: 6.54, end: 16.16, kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
+        { at: 16.16, end: 31.00, kind: "stamp", sub: "찍으면 바로 보여" },
+        { at: 31.00, end: 36.26, kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
+        { at: 36.26, end: 47.50, kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
+        { at: 47.50, end: 62.20, kind: "redeem", sub: "우신고에서 스탬프제가?" },
+        { at: 62.20, end: 68.62, kind: "rewards", sub: "달고나 / 콩가루차 / 팝콘 / 아이스티" },
+        { at: 68.62, end: 78.44, kind: "end", sub: "찍고, 모으고, 받자" },
+        { at: 78.44, end: 107.80, kind: "stamp", sub: "우신고에서 스탬프제가?" },
+        { at: 107.80, end: ORIGINAL_DURATION, kind: "end", sub: "찍고, 모으고, 받자" }
+      ],
       classic: [
         { at: 0.00, end: 6.24, kind: "opening", sub: "우신고에서 / 스탬프제가?" },
         { at: 6.24, end: 15.64, kind: "entry", sub: "학번 / 입장 / 내 QR" },
@@ -492,8 +505,8 @@
       }
       return originalLyricCues.map((cue) => ({
         ...cue,
-        at: Number(lyricMappedTime(cue.at).toFixed(3)),
-        end: Number(lyricMappedTime(Math.min(cue.end, ORIGINAL_DURATION)).toFixed(3)),
+        at: Number(cue.at.toFixed(3)),
+        end: Number(Math.min(cue.end, ORIGINAL_DURATION).toFixed(3)),
         size: Math.round(cue.size)
       }));
     }
