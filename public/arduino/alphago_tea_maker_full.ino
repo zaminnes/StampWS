@@ -20,8 +20,8 @@ const int buttonPin = 3;
 const int defaultWaterSeconds = 15;
 const int defaultTeaSeconds = 20;
 const int defaultThirdDrinkSeconds = 20;
-const int defaultLowerSteps = 2000;
-const int defaultLiftSteps = 2500;
+const int defaultLowerSteps = 4000;
+const int defaultLiftSteps = 4500;
 int cupThreshold = 500;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -29,6 +29,7 @@ MFRC522 rfid(SS_PIN, RST_PIN);
 Servo mixerServo;
 
 volatile bool isEmergency = false;
+volatile unsigned long lastInterruptTime = 0;
 bool lastCupState = false;
 bool isBrewing = false;
 unsigned long lastSensorLogAt = 0;
@@ -55,7 +56,13 @@ void stopOutputs() {
 }
 
 void emergencyStop() {
-  isEmergency = true;
+  if (digitalRead(buttonPin) == LOW) {
+    unsigned long interruptTime = millis();
+    if (interruptTime - lastInterruptTime > 200) {
+      isEmergency = true;
+    }
+    lastInterruptTime = interruptTime;
+  }
 }
 
 bool cupPresent() {
