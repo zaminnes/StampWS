@@ -85,6 +85,17 @@
       color: #0f172a;
     }
 
+    button.active {
+      background: #2563eb;
+      border-color: #2563eb;
+      color: #fff;
+    }
+
+    .version-switch {
+      display: flex;
+      gap: 4px;
+    }
+
     .status {
       color: var(--muted);
       font-size: 12px;
@@ -129,7 +140,7 @@
 </head>
 <body>
   <canvas id="scene" width="1920" height="1080" aria-label="StampWS motion background"></canvas>
-  <audio id="audio" src="./stampws-audio.mp3" preload="auto"></audio>
+  <audio id="audio" src="./stampws-audio-classic.mp3" preload="auto"></audio>
 
   <div class="tap" id="tap">
     <div class="tap-card">
@@ -140,6 +151,10 @@
   </div>
 
   <div class="controls">
+    <span class="version-switch" aria-label="version switch">
+      <button class="active" data-version="classic" type="button">클래식</button>
+      <button data-version="original" type="button">원곡</button>
+    </span>
     <button class="primary" id="playButton" type="button">재생</button>
     <button id="exportButton" type="button">MP4 내보내기</button>
     <a href="https://stampws.kr">stampws.kr</a>
@@ -154,13 +169,33 @@
     const exportButton = document.getElementById("exportButton");
     const statusEl = document.getElementById("status");
     const audio = document.getElementById("audio");
+    const versionButtons = Array.from(document.querySelectorAll("[data-version]"));
     const W = canvas.width;
     const H = canvas.height;
-    const DURATION = 112.464;
-    const TOTAL_BEATS = 240;
-    const BEAT_OFFSET = 0.464;
-    const BEAT = (DURATION - BEAT_OFFSET) / (TOTAL_BEATS - 1);
-    const BPM = 60 / BEAT;
+    const ORIGINAL_DURATION = 112.464;
+    const AUDIO_VERSIONS = {
+      classic: {
+        label: "클래식",
+        src: "./stampws-audio-classic.mp3",
+        duration: 107.12,
+        totalBeats: 224,
+        beatOffset: 0.38
+      },
+      original: {
+        label: "원곡",
+        src: "./stampws-audio.mp3",
+        duration: ORIGINAL_DURATION,
+        totalBeats: 240,
+        beatOffset: 0.464
+      }
+    };
+    let currentVersionKey = "classic";
+    let currentVersion = AUDIO_VERSIONS[currentVersionKey];
+    let DURATION = currentVersion.duration;
+    let TOTAL_BEATS = currentVersion.totalBeats;
+    let BEAT_OFFSET = currentVersion.beatOffset;
+    let BEAT = (DURATION - BEAT_OFFSET) / (TOTAL_BEATS - 1);
+    let BPM = 60 / BEAT;
 
     let startTime = performance.now();
     let playing = false;
@@ -173,21 +208,37 @@
     const keyedVideoCtx = keyedVideoCanvas.getContext("2d", { willReadFrequently: true });
     let taintWarningShown = false;
 
-    const scenes = [
-      { at: 0, end: 4.00, kind: "opening", sub: "우신고에서 / 스탬프제가?" },
-      { at: 4.00, end: 8.00, kind: "entry", sub: "학번 / 입장 / 내 QR" },
-      { at: 8.00, end: 17.00, kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
-      { at: 17.00, end: 31.00, kind: "stamp", sub: "찍으면 바로 보여" },
-      { at: 31.00, end: 37.00, kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
-      { at: 37.00, end: 47.00, kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
-      { at: 47.00, end: 62.00, kind: "redeem", sub: "우신고에서 스탬프제가?" },
-      { at: 62.00, end: 69.00, kind: "rewards", sub: "달고나 / 콩가루차 / 팝콘 / 아이스티" },
-      { at: 69.00, end: 79.00, kind: "end", sub: "찍고, 모으고, 받자" },
-      { at: 79.00, end: 107.00, kind: "stamp", sub: "우신고에서 스탬프제가?" },
-      { at: 107.00, end: DURATION, kind: "end", sub: "찍고, 모으고, 받자" }
-    ];
+    function updateTiming() {
+      DURATION = currentVersion.duration;
+      TOTAL_BEATS = currentVersion.totalBeats;
+      BEAT_OFFSET = currentVersion.beatOffset;
+      BEAT = (DURATION - BEAT_OFFSET) / (TOTAL_BEATS - 1);
+      BPM = 60 / BEAT;
+    }
 
-    const lyricCues = [
+    function scaledTime(seconds) {
+      return seconds * (DURATION / ORIGINAL_DURATION);
+    }
+
+    function buildScenes() {
+      return [
+        { at: 0, end: scaledTime(4.00), kind: "opening", sub: "우신고에서 / 스탬프제가?" },
+        { at: scaledTime(4.00), end: scaledTime(8.00), kind: "entry", sub: "학번 / 입장 / 내 QR" },
+        { at: scaledTime(8.00), end: scaledTime(17.00), kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
+        { at: scaledTime(17.00), end: scaledTime(31.00), kind: "stamp", sub: "찍으면 바로 보여" },
+        { at: scaledTime(31.00), end: scaledTime(37.00), kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
+        { at: scaledTime(37.00), end: scaledTime(47.00), kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
+        { at: scaledTime(47.00), end: scaledTime(62.00), kind: "redeem", sub: "우신고에서 스탬프제가?" },
+        { at: scaledTime(62.00), end: scaledTime(69.00), kind: "rewards", sub: "달고나 / 콩가루차 / 팝콘 / 아이스티" },
+        { at: scaledTime(69.00), end: scaledTime(79.00), kind: "end", sub: "찍고, 모으고, 받자" },
+        { at: scaledTime(79.00), end: scaledTime(107.00), kind: "stamp", sub: "우신고에서 스탬프제가?" },
+        { at: scaledTime(107.00), end: DURATION, kind: "end", sub: "찍고, 모으고, 받자" }
+      ];
+    }
+
+    let scenes = buildScenes();
+
+    const originalLyricCues = [
       { at: 0.00, end: 1.40, text: "우신고에서", size: 138 },
       { at: 1.40, end: 3.06, text: "스탬프제가?", size: 158 },
       { at: 3.06, end: 5.54, text: "학번", size: 128 },
@@ -250,8 +301,21 @@
       { at: 98.94, end: 100.94, text: "스탬프제가?", size: 126 },
       { at: 100.94, end: 102.70, text: "찍으면", size: 112 },
       { at: 103.40, end: 106.46, text: "바로 보여", size: 106 },
-      { at: 109.00, end: DURATION, text: "아이스티", size: 116 }
+      { at: 109.00, end: ORIGINAL_DURATION, text: "아이스티", size: 116 }
     ];
+
+    function buildLyricCues() {
+      const ratio = DURATION / ORIGINAL_DURATION;
+      const isClassic = currentVersionKey === "classic";
+      return originalLyricCues.map((cue) => ({
+        ...cue,
+        at: Number((cue.at * ratio).toFixed(3)),
+        end: Number((Math.min(cue.end, ORIGINAL_DURATION) * ratio).toFixed(3)),
+        size: Math.round(cue.size * (isClassic ? 0.94 : 1))
+      }));
+    }
+
+    let lyricCues = buildLyricCues();
 
     const performerVideos = {
       sw: createOverlayVideo("../../SW.mp4"),
@@ -420,19 +484,20 @@
     }
 
     function drawOpeningLogo(seconds, scene, p) {
+      const classic = currentVersionKey === "classic";
       ctx.save();
       ctx.globalAlpha = snap(p * 4) * snap((1 - p) * 2);
-      drawText("StampWS", W / 2, H / 2 + 124, 42, 950, "rgba(219,234,254,0.9)", "center");
-      drawText("stampws.kr", W / 2, H / 2 + 178, 28, 900, "rgba(219,234,254,0.72)", "center");
+      drawText(classic ? "CLASSIC VERSION" : "StampWS", W / 2, H / 2 + 124, classic ? 34 : 42, 950, classic ? "rgba(254,243,199,0.9)" : "rgba(219,234,254,0.9)", "center");
+      drawText("stampws.kr", W / 2, H / 2 + 178, 28, 900, classic ? "rgba(254,243,199,0.68)" : "rgba(219,234,254,0.72)", "center");
 
       const burst = snap((seconds - scene.at) / 1.2) * snap((scene.end - seconds) / 1.4);
-      ctx.globalAlpha = burst * 0.62;
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
-      ctx.lineWidth = 2;
+      ctx.globalAlpha = burst * (classic ? 0.34 : 0.62);
+      ctx.strokeStyle = classic ? "rgba(254,243,199,0.72)" : "rgba(255,255,255,0.9)";
+      ctx.lineWidth = classic ? 1.5 : 2;
       for (let i = 0; i < 42; i += 1) {
         const a = (i / 42) * Math.PI * 2 + seconds * 0.2;
         const inner = 190 + 16 * Math.sin(seconds + i);
-        const outer = inner + 70 + 90 * ease(p);
+        const outer = inner + (classic ? 42 : 70) + (classic ? 58 : 90) * ease(p);
         ctx.beginPath();
         ctx.moveTo(W / 2 + Math.cos(a) * inner, H / 2 + Math.sin(a) * inner);
         ctx.lineTo(W / 2 + Math.cos(a) * outer, H / 2 + Math.sin(a) * outer);
@@ -462,6 +527,7 @@
     }
 
     function drawGlyphLyric(text, size, seconds, cp) {
+      const classic = currentVersionKey === "classic";
       const glyphs = splitGlyphs(text);
       ctx.font = fontSpec(size);
       const widths = glyphs.map((char) => char === " " ? size * 0.33 : ctx.measureText(char).width);
@@ -469,7 +535,15 @@
       const cursor = cp * Math.max(1, glyphs.length - 1);
 
       ctx.save();
-      fillRound(-totalWidth / 2 - 40, -size * 0.72, totalWidth + 80, size * 1.12, Math.min(34, size * 0.28), "rgba(2,6,23,0.3)", "rgba(255,255,255,0.11)");
+      fillRound(
+        -totalWidth / 2 - 40,
+        -size * 0.72,
+        totalWidth + 80,
+        size * 1.12,
+        Math.min(34, size * 0.28),
+        classic ? "rgba(12,18,30,0.34)" : "rgba(2,6,23,0.3)",
+        classic ? "rgba(250,204,21,0.22)" : "rgba(255,255,255,0.11)"
+      );
       ctx.restore();
 
       let x = -totalWidth / 2;
@@ -481,11 +555,13 @@
         }
         const flash = Math.max(0, 1 - Math.abs(index - cursor) / 0.8);
         const beat = Math.max(0, Math.sin((seconds * 5.6 + index * 0.7) * Math.PI));
-        const scale = 1 + flash * 0.22 + beat * 0.035;
-        const rotate = (flash - 0.4) * 0.08 + Math.sin(seconds * 4.2 + index) * 0.012;
-        const lift = -flash * size * 0.08 + Math.sin(seconds * 6 + index) * 2;
-        const accent = index % 4 === 0 ? "#dbeafe" : "#f8fafc";
-        const flashColor = index % 3 === 0 ? "#60a5fa" : index % 3 === 1 ? "#fef08a" : "#38bdf8";
+        const scale = 1 + flash * (classic ? 0.12 : 0.22) + beat * (classic ? 0.018 : 0.035);
+        const rotate = (flash - 0.4) * (classic ? 0.025 : 0.08) + Math.sin(seconds * 4.2 + index) * (classic ? 0.006 : 0.012);
+        const lift = -flash * size * (classic ? 0.04 : 0.08) + Math.sin(seconds * 6 + index) * (classic ? 1 : 2);
+        const accent = classic ? (index % 4 === 0 ? "#fef3c7" : "#fff7ed") : (index % 4 === 0 ? "#dbeafe" : "#f8fafc");
+        const flashColor = classic
+          ? (index % 3 === 0 ? "#facc15" : index % 3 === 1 ? "#fde68a" : "#ffffff")
+          : (index % 3 === 0 ? "#60a5fa" : index % 3 === 1 ? "#fef08a" : "#38bdf8");
         const color = flash > 0.35 ? flashColor : accent;
 
         ctx.save();
@@ -496,11 +572,11 @@
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.lineJoin = "round";
-        ctx.shadowColor = "rgba(0,0,0,0.42)";
-        ctx.shadowBlur = 24;
-        ctx.shadowOffsetY = 12;
-        ctx.strokeStyle = "rgba(2,6,23,0.92)";
-        ctx.lineWidth = Math.max(8, size * 0.09);
+        ctx.shadowColor = classic ? "rgba(250,204,21,0.2)" : "rgba(0,0,0,0.42)";
+        ctx.shadowBlur = classic ? 30 : 24;
+        ctx.shadowOffsetY = classic ? 7 : 12;
+        ctx.strokeStyle = classic ? "rgba(8,13,25,0.86)" : "rgba(2,6,23,0.92)";
+        ctx.lineWidth = Math.max(8, size * (classic ? 0.075 : 0.09));
         ctx.strokeText(char, 0, 0);
         ctx.shadowColor = "transparent";
         ctx.fillStyle = color;
@@ -522,16 +598,17 @@
       const scene = sceneAt(seconds);
       const cueIndex = lyricCues.indexOf(cue);
       const [centerX, centerYBase, rotate] = lyricLayout(scene, cueIndex);
+      const classic = currentVersionKey === "classic";
       const maxWidth = scene.kind === "rewards" ? 520 : scene.kind === "opening" ? 1180 : 820;
-      const base = scene.kind === "opening" ? cue.size * 0.98 : Math.min(cue.size * 0.9, 116);
+      const base = scene.kind === "opening" ? cue.size * (classic ? 0.9 : 0.98) : Math.min(cue.size * (classic ? 0.84 : 0.9), classic ? 106 : 116);
       const size = fitSize(cue.text, base, maxWidth);
       const enter = snap(cp * 8);
       const exit = snap((1 - cp) * 8);
       const slideSide = cueIndex % 2 === 0 ? -1 : 1;
-      const punch = 1 + 0.05 * Math.sin(cp * Math.PI * 2);
-      const scale = mix(0.84, 1, enter) * mix(1, 0.92, 1 - exit) * punch;
-      const x = centerX + slideSide * mix(70, 0, enter);
-      const y = centerYBase + Math.sin(seconds * 4.8) * 5 + mix(30, 0, enter);
+      const punch = 1 + (classic ? 0.025 : 0.05) * Math.sin(cp * Math.PI * 2);
+      const scale = mix(classic ? 0.9 : 0.84, 1, enter) * mix(1, classic ? 0.96 : 0.92, 1 - exit) * punch;
+      const x = centerX + slideSide * mix(classic ? 38 : 70, 0, enter);
+      const y = centerYBase + Math.sin(seconds * (classic ? 2.6 : 4.8)) * (classic ? 3 : 5) + mix(classic ? 18 : 30, 0, enter);
 
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -541,39 +618,46 @@
       const width = drawGlyphLyric(cue.text, size, seconds, cp);
       ctx.restore();
 
-      drawMotionLines(x, y + size * 0.48, Math.min(760, width + 130), alpha * 0.22, seconds);
+      drawMotionLines(x, y + size * 0.48, Math.min(760, width + 130), alpha * (classic ? 0.08 : 0.22), seconds);
     }
 
     function drawBackground(t) {
+      const classic = currentVersionKey === "classic";
       const g = ctx.createLinearGradient(0, 0, W, H);
-      g.addColorStop(0, "#071020");
-      g.addColorStop(0.52, "#111827");
-      g.addColorStop(1, "#050914");
+      if (classic) {
+        g.addColorStop(0, "#070b18");
+        g.addColorStop(0.48, "#111827");
+        g.addColorStop(1, "#190f08");
+      } else {
+        g.addColorStop(0, "#071020");
+        g.addColorStop(0.52, "#111827");
+        g.addColorStop(1, "#050914");
+      }
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
 
       const blue = ctx.createRadialGradient(W * (0.18 + 0.03 * Math.sin(t * 0.3)), H * 0.22, 0, W * 0.18, H * 0.22, 650);
-      blue.addColorStop(0, "rgba(37,99,235,0.58)");
-      blue.addColorStop(1, "rgba(37,99,235,0)");
+      blue.addColorStop(0, classic ? "rgba(250,204,21,0.28)" : "rgba(37,99,235,0.58)");
+      blue.addColorStop(1, classic ? "rgba(250,204,21,0)" : "rgba(37,99,235,0)");
       ctx.fillStyle = blue;
       ctx.fillRect(0, 0, W, H);
 
       const cyan = ctx.createRadialGradient(W * 0.84, H * (0.18 + 0.04 * Math.cos(t * 0.24)), 0, W * 0.84, H * 0.18, 620);
-      cyan.addColorStop(0, "rgba(96,165,250,0.28)");
-      cyan.addColorStop(1, "rgba(96,165,250,0)");
+      cyan.addColorStop(0, classic ? "rgba(255,247,237,0.18)" : "rgba(96,165,250,0.28)");
+      cyan.addColorStop(1, classic ? "rgba(255,247,237,0)" : "rgba(96,165,250,0)");
       ctx.fillStyle = cyan;
       ctx.fillRect(0, 0, W, H);
 
       const glass = ctx.createLinearGradient(-200 + (t * 32) % 2400, 0, 400 + (t * 32) % 2400, H);
       glass.addColorStop(0, "rgba(255,255,255,0)");
-      glass.addColorStop(0.48, "rgba(255,255,255,0.1)");
+      glass.addColorStop(0.48, classic ? "rgba(255,255,255,0.075)" : "rgba(255,255,255,0.1)");
       glass.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = glass;
       ctx.fillRect(0, 0, W, H);
 
       ctx.save();
-      ctx.globalAlpha = 0.08;
-      ctx.strokeStyle = "#ffffff";
+      ctx.globalAlpha = classic ? 0.045 : 0.08;
+      ctx.strokeStyle = classic ? "#fef3c7" : "#ffffff";
       ctx.lineWidth = 1;
       for (let x = -60; x < W + 60; x += 72) {
         ctx.beginPath();
@@ -588,6 +672,19 @@
         ctx.stroke();
       }
       ctx.restore();
+
+      if (classic) {
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.strokeStyle = "#fef3c7";
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 5; i += 1) {
+          ctx.beginPath();
+          ctx.arc(W / 2, H / 2, 210 + i * 95 + Math.sin(t * 0.45 + i) * 12, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     }
 
     function drawQR(x, y, s, label, phase = 0) {
@@ -850,6 +947,7 @@
       const t = seconds;
       const scene = sceneAt(seconds);
       const p = sceneProgress(scene, seconds);
+      const classic = currentVersionKey === "classic";
 
       drawBackground(t);
 
@@ -873,7 +971,7 @@
         drawPhoneZoom(1190 + 120 * (1 - a), 526, 360, 640, 0.92 + 0.13 * a + 0.045 * Math.cos(seconds * 3.1), 0.16, {
           type: "scanner", title: "부스", pill: "SCAN", main: "스캔 완료", sub: "서버 기록"
         }, p, a);
-        drawComicBurst(960, 522, 78 + Math.sin(seconds * 8) * 8, a * 0.38, seconds, "rgba(96,165,250,0.7)");
+        drawComicBurst(960, 522, 78 + Math.sin(seconds * (classic ? 4 : 8)) * 8, a * (classic ? 0.14 : 0.38), seconds, classic ? "rgba(254,243,199,0.42)" : "rgba(96,165,250,0.7)");
       }
 
       if (scene.kind === "stamp") {
@@ -881,9 +979,9 @@
         drawPhoneZoom(1240, 530, 390, 690, 0.76 + 0.34 * snap(Math.sin(p * Math.PI)), -0.04 + 0.03 * Math.sin(seconds * 1.6), {
           type: "stamp", title: "스탬프", pill: "OK", main: "지급 완료", sub: "기록에 저장"
         }, p, a);
-        drawComicBurst(1160, 300, 86 + Math.sin(seconds * 9) * 10, a * 0.44, seconds, "rgba(250,204,21,0.78)");
-        drawHalftone(260, 690, a * 0.16);
-        drawParticles(960, 520, p);
+        drawComicBurst(1160, 300, 86 + Math.sin(seconds * (classic ? 4 : 9)) * 10, a * (classic ? 0.16 : 0.44), seconds, classic ? "rgba(254,243,199,0.38)" : "rgba(250,204,21,0.78)");
+        drawHalftone(260, 690, a * (classic ? 0.04 : 0.16));
+        drawParticles(960, 520, classic ? p * 0.72 : p);
       }
 
       if (scene.kind === "coupon" || scene.kind === "couponMove") {
@@ -911,7 +1009,7 @@
           const x = [270, 1010, 430, 1160][index];
           const y = [245, 245, 570, 570][index];
           drawRewardCard(asset, x, y, 430, 270, a, 0.86 + a * 0.16 + Math.sin(seconds * 5 + index) * 0.015);
-          if (a > 0.05) drawComicBurst(x + 382, y + 46, 40, a * 0.18, seconds + index, `${asset.color}aa`);
+          if (a > 0.05) drawComicBurst(x + 382, y + 46, 40, a * (classic ? 0.07 : 0.18), seconds + index, classic ? "rgba(254,243,199,0.42)" : `${asset.color}aa`);
         });
       }
 
@@ -950,11 +1048,37 @@
       return audioDestination.stream;
     }
 
+    function updateVersionButtons() {
+      versionButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.version === currentVersionKey);
+      });
+    }
+
+    function setAudioVersion(versionKey, restart = false) {
+      if (!AUDIO_VERSIONS[versionKey] || recording) return;
+      const wasPlaying = restart && playing;
+      currentVersionKey = versionKey;
+      currentVersion = AUDIO_VERSIONS[currentVersionKey];
+      updateTiming();
+      scenes = buildScenes();
+      lyricCues = buildLyricCues();
+      updateVersionButtons();
+      audio.pause();
+      audio.loop = true;
+      audio.src = currentVersion.src;
+      audio.load();
+      audio.currentTime = 0;
+      startTime = performance.now();
+      statusEl.textContent = `${currentVersion.label} 준비`;
+      drawScene(0);
+      if (wasPlaying) play();
+    }
+
     async function play() {
       playing = true;
       tap.style.display = "none";
       document.querySelector(".controls")?.classList.add("hidden");
-      statusEl.textContent = "재생 중";
+      statusEl.textContent = `${currentVersion.label} 재생`;
       startTime = performance.now();
       try {
         if (audioContext?.state === "suspended") await audioContext.resume();
@@ -1021,7 +1145,7 @@
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `stampws-phone-scenes.${isMp4 ? "mp4" : "webm"}`;
+        link.download = `stampws-${currentVersionKey}-phone-scenes.${isMp4 ? "mp4" : "webm"}`;
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -1055,7 +1179,7 @@
     }
 
     audio.addEventListener("loadedmetadata", () => {
-      statusEl.textContent = `오디오 ${audio.duration.toFixed(1)}s`;
+      statusEl.textContent = `${currentVersion.label} ${audio.duration.toFixed(1)}s`;
     });
     audio.addEventListener("ended", () => {
       if (playing && !recording) {
@@ -1064,6 +1188,9 @@
       }
     });
 
+    versionButtons.forEach((button) => {
+      button.addEventListener("click", () => setAudioVersion(button.dataset.version, playing));
+    });
     playButton.addEventListener("click", () => play());
     exportButton.addEventListener("click", exportVideo);
     document.addEventListener("click", (event) => {
