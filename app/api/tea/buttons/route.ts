@@ -10,7 +10,7 @@ import type { ArduinoButton } from "@/lib/types";
 export const runtime = "nodejs";
 
 const MAX_BUTTONS = 24;
-const MAX_SCRIPT_BYTES = 12_000;
+const MAX_SCRIPT_BYTES = 64_000;
 
 function normalizeLabel(value: unknown) {
   if (typeof value !== "string") throw new HttpError(400, "버튼 이름을 입력하세요.");
@@ -24,7 +24,7 @@ function normalizeScript(value: unknown) {
   const scriptText = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   const bytes = new TextEncoder().encode(scriptText).byteLength;
   if (bytes < 1) throw new HttpError(400, "INO 스크립트를 입력하세요.");
-  if (bytes > MAX_SCRIPT_BYTES) throw new HttpError(413, "버튼 스크립트는 12KB 이하만 저장됩니다.");
+  if (bytes > MAX_SCRIPT_BYTES) throw new HttpError(413, "버튼 스크립트는 64KB 이하만 저장됩니다.");
   if (scriptText.includes("\0")) throw new HttpError(400, "텍스트 스크립트만 저장할 수 있습니다.");
   return `${scriptText}\n`;
 }

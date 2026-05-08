@@ -443,27 +443,47 @@ function newArduinoButtonDraft(): ArduinoButtonView {
 
 function parseArduinoButtonScript(scriptText: string) {
   const steps: Array<{ type: "send"; command: string } | { type: "delay"; ms: number }> = [];
-  const lines = scriptText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const source = scriptText
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+  const tokens: Array<{ index: number; step: { type: "send"; command: string } | { type: "delay"; ms: number } }> = [];
+  const commandPattern = /(?:Serial\.(?:println|print|write)|send|writeSerial|command)\s*\(\s*(?:F\s*\(\s*)?["']([^"'\n]{1,80})["']\s*\)?\s*\)/gi;
+  const delayPattern = /(?:delay|wait)\s*\(\s*(\d{1,6})\s*\)/gi;
 
-  for (const rawLine of lines) {
-    let line = rawLine.replace(/\/\/.*$/, "").trim();
-    if (!line || line === "{" || line === "}") continue;
-    if (/^(void|if|else|for|while|switch)\b/.test(line)) continue;
-    line = line.replace(/;$/, "").trim();
+  function normalizeCommand(value: string) {
+    const candidate = value.normalize("NFKC").trim().toUpperCase();
+    return /^[A-Z][A-Z0-9_:-]*(,[A-Z0-9_.:-]+){0,6}$/.test(candidate) ? candidate.slice(0, 80) : "";
+  }
 
-    const delayMatch = /^delay\s*\(\s*(\d{1,6})\s*\)$/i.exec(line);
-    if (delayMatch) {
-      steps.push({ type: "delay", ms: Math.min(Number(delayMatch[1]), 60_000) });
-      continue;
-    }
+  for (const match of source.matchAll(commandPattern)) {
+    const command = normalizeCommand(match[1] || "");
+    if (command) tokens.push({ index: match.index || 0, step: { type: "send", command } });
+  }
 
-    const sendMatch =
-      /^(?:Serial\.println|Serial\.print|send|writeSerial)\s*\(\s*"([^"\n]{1,80})"\s*\)$/i.exec(line) ||
-      /^(?:Serial\.println|Serial\.print|send|writeSerial)\s*\(\s*'([^'\n]{1,80})'\s*\)$/i.exec(line);
-    const candidate = (sendMatch?.[1] || line).normalize("NFKC").trim().toUpperCase();
-    if (/^[A-Z][A-Z0-9_:-]*(,[A-Z0-9_.:-]+){0,6}$/.test(candidate)) {
-      steps.push({ type: "send", command: candidate.slice(0, 80) });
-    }
+  for (const match of source.matchAll(delayPattern)) {
+    tokens.push({
+      index: match.index || 0,
+      step: { type: "delay", ms: Math.min(Number(match[1]), 60_000) }
+    });
+  }
+
+  source.split("\n").forEach((rawLine, lineIndex) => {
+    const withoutComment = rawLine.replace(/\/\/.*$/, "").trim();
+    if (!withoutComment || /[(){}]/.test(withoutComment)) return;
+    if (/^(#|const\b|int\b|long\b|float\b|double\b|bool\b|char\b|String\b|void\b|return\b|if\b|else\b|for\b|while\b|switch\b)/i.test(withoutComment)) return;
+    withoutComment.split(";").forEach((part, partIndex) => {
+      const command = normalizeCommand(part);
+      if (command) tokens.push({ index: source.indexOf(rawLine) + lineIndex + partIndex / 10, step: { type: "send", command } });
+    });
+  });
+
+  const seen = new Set<string>();
+  for (const { step } of tokens.sort((a, b) => a.index - b.index)) {
+    const key = step.type === "delay" ? `d:${step.ms}:${steps.length}` : `s:${step.command}:${steps.length}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    steps.push(step);
   }
 
   return steps;
@@ -2637,7 +2657,7 @@ function TeaMakerPanel() {
     setMessage("");
     if (!navigator.serial) {
       setMessage("Chrome/Edge HTTPS 필요");
-      return;
+      return false;
     }
     try {
       const port = await navigator.serial.requestPort();
@@ -2648,9 +2668,11 @@ function TeaMakerPanel() {
       setMachineStatus("idle");
       appendSerialLog("USB connected", "WEB");
       readSerialLoop(port).catch(() => setMachineStatus("error"));
+      return true;
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "USB 연결 실패");
       setMachineStatus("error");
+      return false;
     }
   }
 
@@ -2675,6 +2697,12 @@ function TeaMakerPanel() {
     const clean = command.trim().toUpperCase();
     await writer.write(new TextEncoder().encode(`${clean}\n`));
     appendSerialLog(clean, "WEB");
+  }
+
+  async function ensureSerialConnection() {
+    if (writerRef.current && serialConnected) return true;
+    appendSerialLog("USB 연결 요청", "WEB");
+    return connectDevice();
   }
 
   async function patchReservation(reservationId: string, action: "start" | "ready" | "serve" | "cancel", command = serialCommand) {
@@ -2788,6 +2816,7 @@ function TeaMakerPanel() {
         method: "PATCH",
         body: JSON.stringify({ buttons: arduinoButtons })
       });
+      await loadArduinoButtons();
       setArduinoButtons(data.buttons);
       setArduinoButtonsUpdatedAt(data.updatedAt || "");
       setMessage(`버튼 저장 ${data.buttons.length}개`);
@@ -2805,6 +2834,8 @@ function TeaMakerPanel() {
       const steps = parseArduinoButtonScript(button.scriptText);
       const sendCount = steps.filter((step) => step.type === "send").length;
       if (sendCount < 1) throw new Error("전송할 Serial.println 줄이 없습니다.");
+      const connected = await ensureSerialConnection();
+      if (!connected) throw new Error("USB 연결 필요");
       for (const step of steps) {
         if (step.type === "delay") {
           appendSerialLog(`delay ${step.ms}ms`, "WEB");
@@ -2812,6 +2843,9 @@ function TeaMakerPanel() {
         } else {
           await writeSerial(step.command);
         }
+      }
+      if (steps.some((step) => step.type === "send" && /^(T|FORCE),\d{1,3},\d{1,3}$/.test(step.command))) {
+        await updateStock("decrement");
       }
       setMessage(`${button.label} 실행`);
     } catch (err) {
@@ -2918,7 +2952,9 @@ function TeaMakerPanel() {
                       <input value={button.label} onChange={(event) => updateArduinoButton(button.id, { label: event.target.value })} maxLength={18} />
                     </label>
                     <span className="pill">{sendCount}줄</span>
-                    <button className="primaryButton" disabled={busy || !serialConnected || sendCount < 1} onClick={() => runArduinoButton(button)} type="button">실행</button>
+                    <button className="primaryButton" disabled={busy || sendCount < 1} onClick={() => runArduinoButton(button)} type="button">
+                      {serialConnected ? "실행" : "연결실행"}
+                    </button>
                     <button className="dangerButton" disabled={busy} onClick={() => deleteArduinoButton(button.id)} type="button">삭제</button>
                   </div>
                   <textarea
@@ -2927,7 +2963,7 @@ function TeaMakerPanel() {
                     value={button.scriptText}
                     onChange={(event) => updateArduinoButton(button.id, { scriptText: event.target.value })}
                   />
-                  <p className="hintText">Serial.println("T,15,20"); / delay(1000); 형식.</p>
+                  <p className="hintText">Serial.println("T,15,20"); / FORCE,15,20 / STOP / delay(1000). 저장 후 모든 관리자에게 적용.</p>
                 </div>
               );
             })}
