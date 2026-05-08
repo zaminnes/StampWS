@@ -2957,7 +2957,7 @@ function TeaMakerPanel() {
             <input value={manualName} onChange={(event) => setManualName(event.target.value)} maxLength={12} />
           </label>
           <button className="secondaryButton" disabled={busy} onClick={createManualReservation} type="button">현장추가</button>
-          <a className="secondaryLink" href="/arduino/alphago-tea-maker" target="_blank" rel="noreferrer">최신INO</a>
+          <a className="secondaryLink" href="/api/tea/firmware?default=1&raw=1" target="_blank" rel="noreferrer">최신INO</a>
         </div>
         {message && <p className={message.includes("실패") || message.includes("필요") ? "errorText" : "statusText"}>{message}</p>}
         <div className="arduinoButtonsPanel">
