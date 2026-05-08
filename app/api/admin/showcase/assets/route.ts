@@ -24,6 +24,10 @@ const ASSETS = {
     file: path.join(ASSET_DIR, "stampws-audio-classic.mp3"),
     contentType: "audio/mpeg"
   },
+  "stampws-audio-boss.mp3": {
+    file: path.join(ASSET_DIR, "stampws-audio-boss.mp3"),
+    contentType: "audio/mpeg"
+  },
   "SW.mp4": {
     file: path.join(ASSET_DIR, "SW.mp4"),
     contentType: "video/mp4"

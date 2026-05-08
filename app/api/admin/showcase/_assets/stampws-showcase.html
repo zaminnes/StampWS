@@ -91,6 +91,18 @@
       color: #fff;
     }
 
+    .version-switch button[data-version="classic"].active {
+      background: #d97706;
+      border-color: #f59e0b;
+      color: #fff;
+    }
+
+    .version-switch button[data-version="boss"].active {
+      background: #7f1d1d;
+      border-color: #dc2626;
+      color: #fff;
+    }
+
     .version-switch {
       display: flex;
       gap: 4px;
@@ -153,6 +165,7 @@
   <div class="controls">
     <span class="version-switch" aria-label="version switch">
       <button class="active" data-version="classic" type="button">클래식</button>
+      <button data-version="boss" type="button">파이널</button>
       <button data-version="original" type="button">원곡</button>
     </span>
     <button class="primary" id="playButton" type="button">재생</button>
@@ -173,6 +186,7 @@
     const W = canvas.width;
     const H = canvas.height;
     const ORIGINAL_DURATION = 112.464;
+    const VERSION_ORDER = ["classic", "boss", "original"];
     const AUDIO_VERSIONS = {
       classic: {
         label: "클래식",
@@ -180,6 +194,13 @@
         duration: 107.12,
         totalBeats: 224,
         beatOffset: 0.38
+      },
+      boss: {
+        label: "파이널",
+        src: "./stampws-audio-boss.mp3",
+        duration: 112.68,
+        totalBeats: 240,
+        beatOffset: 0.32
       },
       original: {
         label: "원곡",
@@ -304,14 +325,66 @@
       { at: 109.00, end: ORIGINAL_DURATION, text: "아이스티", size: 116 }
     ];
 
+    const bossLyricCues = [
+      { at: 4.02, end: 6.10, text: "우신고에서", size: 126 },
+      { at: 6.10, end: 8.60, text: "스탬프제가?", size: 146 },
+      { at: 10.02, end: 11.50, text: "학번", size: 132 },
+      { at: 12.18, end: 13.28, text: "입장", size: 132 },
+      { at: 15.05, end: 16.78, text: "내 QR", size: 130 },
+      { at: 18.36, end: 20.16, text: "한 번", size: 116 },
+      { at: 20.16, end: 21.55, text: "찍어", size: 128 },
+      { at: 21.78, end: 23.05, text: "눈앞이", size: 108 },
+      { at: 23.05, end: 24.62, text: "바뀌어", size: 110 },
+      { at: 27.55, end: 29.00, text: "사라지기", size: 96 },
+      { at: 29.00, end: 30.28, text: "전에", size: 116 },
+      { at: 31.28, end: 34.76, text: "딱", size: 150 },
+      { at: 35.15, end: 37.80, text: "맞춰", size: 132 },
+      { at: 40.70, end: 43.80, text: "우신고에서", size: 118 },
+      { at: 44.00, end: 45.90, text: "스탬프제가?", size: 132 },
+      { at: 46.10, end: 48.10, text: "우신고에서", size: 118 },
+      { at: 48.20, end: 50.70, text: "스탬프제가?", size: 132 },
+      { at: 50.80, end: 52.60, text: "찍으면", size: 116 },
+      { at: 53.20, end: 56.20, text: "바로 보여", size: 112 },
+      { at: 59.60, end: 61.28, text: "다섯 개", size: 124 },
+      { at: 61.40, end: 62.55, text: "쿠폰", size: 136 },
+      { at: 62.75, end: 64.20, text: "하나만", size: 126 },
+      { at: 64.40, end: 65.45, text: "선택", size: 136 },
+      { at: 66.30, end: 67.12, text: "손이 먼저", size: 104 },
+      { at: 67.12, end: 68.30, text: "가", size: 138 },
+      { at: 69.10, end: 69.72, text: "눈이 먼저", size: 104 },
+      { at: 69.72, end: 70.80, text: "가", size: 138 },
+      { at: 72.55, end: 73.70, text: "오늘은", size: 112 },
+      { at: 73.80, end: 74.90, text: "달라", size: 126 },
+      { at: 75.15, end: 75.96, text: "다", size: 146 },
+      { at: 76.10, end: 77.35, text: "받아", size: 136 },
+      { at: 78.70, end: 80.10, text: "우신고에서", size: 120 },
+      { at: 80.20, end: 81.72, text: "스탬프제가?", size: 134 },
+      { at: 81.80, end: 83.48, text: "우신고에서", size: 120 },
+      { at: 83.60, end: 84.94, text: "스탬프제가?", size: 134 },
+      { at: 85.05, end: 86.88, text: "찍으면", size: 118 },
+      { at: 87.15, end: 90.20, text: "바로 보여", size: 114 },
+      { at: 91.30, end: 92.45, text: "달고나", size: 112 },
+      { at: 92.55, end: 93.78, text: "콩가루차", size: 110 },
+      { at: 93.90, end: 95.24, text: "팝콘", size: 120 },
+      { at: 95.35, end: 97.30, text: "아이스티", size: 122 },
+      { at: 98.20, end: 99.00, text: "찍고", size: 108 },
+      { at: 99.10, end: 100.20, text: "모으고", size: 108 },
+      { at: 100.35, end: 102.80, text: "받자", size: 124 },
+      { at: 103.50, end: 105.20, text: "찍고", size: 108 },
+      { at: 105.40, end: 106.92, text: "모으고", size: 108 },
+      { at: 107.15, end: 110.40, text: "받자", size: 126 },
+      { at: 110.40, end: 112.68, text: "아이스티", size: 122 }
+    ];
+
     function buildLyricCues() {
       const ratio = DURATION / ORIGINAL_DURATION;
       const isClassic = currentVersionKey === "classic";
+      const isBoss = currentVersionKey === "boss";
       return originalLyricCues.map((cue) => ({
         ...cue,
         at: Number((cue.at * ratio).toFixed(3)),
         end: Number((Math.min(cue.end, ORIGINAL_DURATION) * ratio).toFixed(3)),
-        size: Math.round(cue.size * (isClassic ? 0.94 : 1))
+        size: Math.round(cue.size * (isBoss ? 1.04 : isClassic ? 0.94 : 1))
       }));
     }
 
@@ -477,6 +550,59 @@
       ctx.restore();
     }
 
+    function drawVersionAtmosphere(seconds) {
+      const boss = currentVersionKey === "boss";
+      const classic = currentVersionKey === "classic";
+      if (!boss && !classic) return;
+
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      const pulse = 0.5 + 0.5 * Math.sin(seconds * (boss ? 3.2 : 1.9));
+      const beamCount = boss ? 10 : 7;
+      for (let i = 0; i < beamCount; i += 1) {
+        const x = (i / (beamCount - 1)) * W;
+        const width = boss ? 160 : 110;
+        const shift = Math.sin(seconds * 0.7 + i) * 90;
+        const g = ctx.createLinearGradient(x + shift, 0, W / 2, H);
+        g.addColorStop(0, boss ? "rgba(248,113,113,0.24)" : "rgba(254,243,199,0.18)");
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(x - width + shift, 0);
+        ctx.lineTo(x + width + shift, 0);
+        ctx.lineTo(W / 2 + Math.sin(seconds + i) * 260, H);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = boss ? 0.52 : 0.26;
+      ctx.strokeStyle = boss ? "rgba(250,204,21,0.85)" : "rgba(255,255,255,0.72)";
+      ctx.lineWidth = boss ? 3.2 : 1.8;
+      for (let i = 0; i < (boss ? 5 : 3); i += 1) {
+        const r = 250 + i * 120 + pulse * (boss ? 50 : 24);
+        ctx.beginPath();
+        ctx.arc(W / 2, H / 2, r, -Math.PI * 0.2 + seconds * 0.08, Math.PI * 1.08 + seconds * 0.08);
+        ctx.stroke();
+      }
+
+      if (boss) {
+        ctx.globalAlpha = 0.24 + pulse * 0.16;
+        ctx.fillStyle = "rgba(127,29,29,0.58)";
+        ctx.fillRect(0, 0, W, 92);
+        ctx.fillRect(0, H - 92, W, 92);
+        ctx.strokeStyle = "rgba(248,113,113,0.9)";
+        ctx.lineWidth = 2.6;
+        for (let i = 0; i < 16; i += 1) {
+          const y = 120 + ((i * 71 + seconds * 140) % (H - 240));
+          ctx.beginPath();
+          ctx.moveTo(-120, y);
+          ctx.lineTo(W + 120, y + Math.sin(seconds + i) * 60);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
     function drawPhoneZoom(cx, cy, w, h, scale, rotation, content, t, alpha = 1) {
       const sw = w * scale;
       const sh = h * scale;
@@ -485,19 +611,20 @@
 
     function drawOpeningLogo(seconds, scene, p) {
       const classic = currentVersionKey === "classic";
+      const boss = currentVersionKey === "boss";
       ctx.save();
       ctx.globalAlpha = snap(p * 4) * snap((1 - p) * 2);
-      drawText(classic ? "CLASSIC VERSION" : "StampWS", W / 2, H / 2 + 124, classic ? 34 : 42, 950, classic ? "rgba(254,243,199,0.9)" : "rgba(219,234,254,0.9)", "center");
-      drawText("stampws.kr", W / 2, H / 2 + 178, 28, 900, classic ? "rgba(254,243,199,0.68)" : "rgba(219,234,254,0.72)", "center");
+      drawText(boss ? "FINAL VOCAL" : classic ? "CLASSIC VERSION" : "StampWS", W / 2, H / 2 + 124, boss ? 36 : classic ? 34 : 42, 950, boss ? "rgba(254,226,226,0.92)" : classic ? "rgba(254,243,199,0.9)" : "rgba(219,234,254,0.9)", "center");
+      drawText("stampws.kr", W / 2, H / 2 + 178, 28, 900, boss ? "rgba(252,165,165,0.72)" : classic ? "rgba(254,243,199,0.68)" : "rgba(219,234,254,0.72)", "center");
 
       const burst = snap((seconds - scene.at) / 1.2) * snap((scene.end - seconds) / 1.4);
-      ctx.globalAlpha = burst * (classic ? 0.34 : 0.62);
-      ctx.strokeStyle = classic ? "rgba(254,243,199,0.72)" : "rgba(255,255,255,0.9)";
-      ctx.lineWidth = classic ? 1.5 : 2;
+      ctx.globalAlpha = burst * (boss ? 0.48 : classic ? 0.34 : 0.62);
+      ctx.strokeStyle = boss ? "rgba(248,113,113,0.78)" : classic ? "rgba(254,243,199,0.72)" : "rgba(255,255,255,0.9)";
+      ctx.lineWidth = boss ? 2.4 : classic ? 1.5 : 2;
       for (let i = 0; i < 42; i += 1) {
         const a = (i / 42) * Math.PI * 2 + seconds * 0.2;
         const inner = 190 + 16 * Math.sin(seconds + i);
-        const outer = inner + (classic ? 42 : 70) + (classic ? 58 : 90) * ease(p);
+        const outer = inner + (boss ? 96 : classic ? 42 : 70) + (boss ? 120 : classic ? 58 : 90) * ease(p);
         ctx.beginPath();
         ctx.moveTo(W / 2 + Math.cos(a) * inner, H / 2 + Math.sin(a) * inner);
         ctx.lineTo(W / 2 + Math.cos(a) * outer, H / 2 + Math.sin(a) * outer);
@@ -528,6 +655,7 @@
 
     function drawGlyphLyric(text, size, seconds, cp) {
       const classic = currentVersionKey === "classic";
+      const boss = currentVersionKey === "boss";
       const glyphs = splitGlyphs(text);
       ctx.font = fontSpec(size);
       const widths = glyphs.map((char) => char === " " ? size * 0.33 : ctx.measureText(char).width);
@@ -541,8 +669,8 @@
         totalWidth + 80,
         size * 1.12,
         Math.min(34, size * 0.28),
-        classic ? "rgba(12,18,30,0.34)" : "rgba(2,6,23,0.3)",
-        classic ? "rgba(250,204,21,0.22)" : "rgba(255,255,255,0.11)"
+        boss ? "rgba(24,6,10,0.44)" : classic ? "rgba(12,18,30,0.34)" : "rgba(2,6,23,0.3)",
+        boss ? "rgba(248,113,113,0.26)" : classic ? "rgba(250,204,21,0.22)" : "rgba(255,255,255,0.11)"
       );
       ctx.restore();
 
@@ -555,11 +683,13 @@
         }
         const flash = Math.max(0, 1 - Math.abs(index - cursor) / 0.8);
         const beat = Math.max(0, Math.sin((seconds * 5.6 + index * 0.7) * Math.PI));
-        const scale = 1 + flash * (classic ? 0.12 : 0.22) + beat * (classic ? 0.018 : 0.035);
-        const rotate = (flash - 0.4) * (classic ? 0.025 : 0.08) + Math.sin(seconds * 4.2 + index) * (classic ? 0.006 : 0.012);
-        const lift = -flash * size * (classic ? 0.04 : 0.08) + Math.sin(seconds * 6 + index) * (classic ? 1 : 2);
-        const accent = classic ? (index % 4 === 0 ? "#fef3c7" : "#fff7ed") : (index % 4 === 0 ? "#dbeafe" : "#f8fafc");
-        const flashColor = classic
+        const scale = 1 + flash * (boss ? 0.28 : classic ? 0.12 : 0.22) + beat * (boss ? 0.055 : classic ? 0.018 : 0.035);
+        const rotate = (flash - 0.4) * (boss ? 0.055 : classic ? 0.025 : 0.08) + Math.sin(seconds * 4.2 + index) * (boss ? 0.01 : classic ? 0.006 : 0.012);
+        const lift = -flash * size * (boss ? 0.1 : classic ? 0.04 : 0.08) + Math.sin(seconds * 6 + index) * (boss ? 2.5 : classic ? 1 : 2);
+        const accent = boss ? (index % 4 === 0 ? "#fecaca" : "#fff1f2") : classic ? (index % 4 === 0 ? "#fef3c7" : "#fff7ed") : (index % 4 === 0 ? "#dbeafe" : "#f8fafc");
+        const flashColor = boss
+          ? (index % 3 === 0 ? "#ef4444" : index % 3 === 1 ? "#facc15" : "#ffffff")
+          : classic
           ? (index % 3 === 0 ? "#facc15" : index % 3 === 1 ? "#fde68a" : "#ffffff")
           : (index % 3 === 0 ? "#60a5fa" : index % 3 === 1 ? "#fef08a" : "#38bdf8");
         const color = flash > 0.35 ? flashColor : accent;
@@ -572,11 +702,11 @@
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.lineJoin = "round";
-        ctx.shadowColor = classic ? "rgba(250,204,21,0.2)" : "rgba(0,0,0,0.42)";
-        ctx.shadowBlur = classic ? 30 : 24;
-        ctx.shadowOffsetY = classic ? 7 : 12;
-        ctx.strokeStyle = classic ? "rgba(8,13,25,0.86)" : "rgba(2,6,23,0.92)";
-        ctx.lineWidth = Math.max(8, size * (classic ? 0.075 : 0.09));
+        ctx.shadowColor = boss ? "rgba(127,29,29,0.48)" : classic ? "rgba(250,204,21,0.2)" : "rgba(0,0,0,0.42)";
+        ctx.shadowBlur = boss ? 34 : classic ? 30 : 24;
+        ctx.shadowOffsetY = boss ? 15 : classic ? 7 : 12;
+        ctx.strokeStyle = boss ? "rgba(3,7,18,0.94)" : classic ? "rgba(8,13,25,0.86)" : "rgba(2,6,23,0.92)";
+        ctx.lineWidth = Math.max(8, size * (boss ? 0.1 : classic ? 0.075 : 0.09));
         ctx.strokeText(char, 0, 0);
         ctx.shadowColor = "transparent";
         ctx.fillStyle = color;
@@ -599,16 +729,17 @@
       const cueIndex = lyricCues.indexOf(cue);
       const [centerX, centerYBase, rotate] = lyricLayout(scene, cueIndex);
       const classic = currentVersionKey === "classic";
+      const boss = currentVersionKey === "boss";
       const maxWidth = scene.kind === "rewards" ? 520 : scene.kind === "opening" ? 1180 : 820;
-      const base = scene.kind === "opening" ? cue.size * (classic ? 0.9 : 0.98) : Math.min(cue.size * (classic ? 0.84 : 0.9), classic ? 106 : 116);
+      const base = scene.kind === "opening" ? cue.size * (boss ? 1.02 : classic ? 0.9 : 0.98) : Math.min(cue.size * (boss ? 0.96 : classic ? 0.84 : 0.9), boss ? 124 : classic ? 106 : 116);
       const size = fitSize(cue.text, base, maxWidth);
       const enter = snap(cp * 8);
       const exit = snap((1 - cp) * 8);
       const slideSide = cueIndex % 2 === 0 ? -1 : 1;
-      const punch = 1 + (classic ? 0.025 : 0.05) * Math.sin(cp * Math.PI * 2);
-      const scale = mix(classic ? 0.9 : 0.84, 1, enter) * mix(1, classic ? 0.96 : 0.92, 1 - exit) * punch;
-      const x = centerX + slideSide * mix(classic ? 38 : 70, 0, enter);
-      const y = centerYBase + Math.sin(seconds * (classic ? 2.6 : 4.8)) * (classic ? 3 : 5) + mix(classic ? 18 : 30, 0, enter);
+      const punch = 1 + (boss ? 0.08 : classic ? 0.025 : 0.05) * Math.sin(cp * Math.PI * 2);
+      const scale = mix(boss ? 0.78 : classic ? 0.9 : 0.84, 1, enter) * mix(1, boss ? 0.88 : classic ? 0.96 : 0.92, 1 - exit) * punch;
+      const x = centerX + slideSide * mix(boss ? 96 : classic ? 38 : 70, 0, enter);
+      const y = centerYBase + Math.sin(seconds * (boss ? 3.8 : classic ? 2.6 : 4.8)) * (boss ? 7 : classic ? 3 : 5) + mix(boss ? 42 : classic ? 18 : 30, 0, enter);
 
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -618,13 +749,18 @@
       const width = drawGlyphLyric(cue.text, size, seconds, cp);
       ctx.restore();
 
-      drawMotionLines(x, y + size * 0.48, Math.min(760, width + 130), alpha * (classic ? 0.08 : 0.22), seconds);
+      drawMotionLines(x, y + size * 0.48, Math.min(760, width + 130), alpha * (boss ? 0.34 : classic ? 0.08 : 0.22), seconds);
     }
 
     function drawBackground(t) {
       const classic = currentVersionKey === "classic";
+      const boss = currentVersionKey === "boss";
       const g = ctx.createLinearGradient(0, 0, W, H);
-      if (classic) {
+      if (boss) {
+        g.addColorStop(0, "#09030a");
+        g.addColorStop(0.42, "#1f0b13");
+        g.addColorStop(1, "#020617");
+      } else if (classic) {
         g.addColorStop(0, "#070b18");
         g.addColorStop(0.48, "#111827");
         g.addColorStop(1, "#190f08");
@@ -637,27 +773,27 @@
       ctx.fillRect(0, 0, W, H);
 
       const blue = ctx.createRadialGradient(W * (0.18 + 0.03 * Math.sin(t * 0.3)), H * 0.22, 0, W * 0.18, H * 0.22, 650);
-      blue.addColorStop(0, classic ? "rgba(250,204,21,0.28)" : "rgba(37,99,235,0.58)");
-      blue.addColorStop(1, classic ? "rgba(250,204,21,0)" : "rgba(37,99,235,0)");
+      blue.addColorStop(0, boss ? "rgba(127,29,29,0.68)" : classic ? "rgba(250,204,21,0.28)" : "rgba(37,99,235,0.58)");
+      blue.addColorStop(1, boss ? "rgba(127,29,29,0)" : classic ? "rgba(250,204,21,0)" : "rgba(37,99,235,0)");
       ctx.fillStyle = blue;
       ctx.fillRect(0, 0, W, H);
 
       const cyan = ctx.createRadialGradient(W * 0.84, H * (0.18 + 0.04 * Math.cos(t * 0.24)), 0, W * 0.84, H * 0.18, 620);
-      cyan.addColorStop(0, classic ? "rgba(255,247,237,0.18)" : "rgba(96,165,250,0.28)");
-      cyan.addColorStop(1, classic ? "rgba(255,247,237,0)" : "rgba(96,165,250,0)");
+      cyan.addColorStop(0, boss ? "rgba(234,88,12,0.22)" : classic ? "rgba(255,247,237,0.18)" : "rgba(96,165,250,0.28)");
+      cyan.addColorStop(1, boss ? "rgba(234,88,12,0)" : classic ? "rgba(255,247,237,0)" : "rgba(96,165,250,0)");
       ctx.fillStyle = cyan;
       ctx.fillRect(0, 0, W, H);
 
       const glass = ctx.createLinearGradient(-200 + (t * 32) % 2400, 0, 400 + (t * 32) % 2400, H);
       glass.addColorStop(0, "rgba(255,255,255,0)");
-      glass.addColorStop(0.48, classic ? "rgba(255,255,255,0.075)" : "rgba(255,255,255,0.1)");
+      glass.addColorStop(0.48, boss ? "rgba(248,113,113,0.12)" : classic ? "rgba(255,255,255,0.075)" : "rgba(255,255,255,0.1)");
       glass.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = glass;
       ctx.fillRect(0, 0, W, H);
 
       ctx.save();
-      ctx.globalAlpha = classic ? 0.045 : 0.08;
-      ctx.strokeStyle = classic ? "#fef3c7" : "#ffffff";
+      ctx.globalAlpha = boss ? 0.035 : classic ? 0.045 : 0.08;
+      ctx.strokeStyle = boss ? "#fecaca" : classic ? "#fef3c7" : "#ffffff";
       ctx.lineWidth = 1;
       for (let x = -60; x < W + 60; x += 72) {
         ctx.beginPath();
@@ -673,14 +809,14 @@
       }
       ctx.restore();
 
-      if (classic) {
+      if (classic || boss) {
         ctx.save();
-        ctx.globalAlpha = 0.12;
-        ctx.strokeStyle = "#fef3c7";
-        ctx.lineWidth = 1.5;
-        for (let i = 0; i < 5; i += 1) {
+        ctx.globalAlpha = boss ? 0.18 : 0.12;
+        ctx.strokeStyle = boss ? "#ef4444" : "#fef3c7";
+        ctx.lineWidth = boss ? 2.2 : 1.5;
+        for (let i = 0; i < (boss ? 7 : 5); i += 1) {
           ctx.beginPath();
-          ctx.arc(W / 2, H / 2, 210 + i * 95 + Math.sin(t * 0.45 + i) * 12, 0, Math.PI * 2);
+          ctx.arc(W / 2, H / 2, (boss ? 170 : 210) + i * (boss ? 82 : 95) + Math.sin(t * (boss ? 0.7 : 0.45) + i) * (boss ? 20 : 12), 0, Math.PI * 2);
           ctx.stroke();
         }
         ctx.restore();
@@ -910,14 +1046,21 @@
     function drawVideoCutout(video, cx, cy, w, h, alpha, rotation, scale, mirror = false) {
       if (!video || video.readyState < 2) return;
       const keyedFrame = drawKeyedVideoFrame(video, w, h);
+      const boss = currentVersionKey === "boss";
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(cx, cy);
       ctx.rotate(rotation);
       ctx.scale((mirror ? -1 : 1) * scale, scale);
-      ctx.shadowColor = "rgba(0,0,0,0.34)";
-      ctx.shadowBlur = 28;
-      ctx.shadowOffsetY = 18;
+      ctx.shadowColor = boss ? "rgba(239,68,68,0.52)" : "rgba(0,0,0,0.34)";
+      ctx.shadowBlur = boss ? 42 : 28;
+      ctx.shadowOffsetY = boss ? 24 : 18;
+      if (boss) {
+        ctx.fillStyle = "rgba(127,29,29,0.36)";
+        ctx.beginPath();
+        ctx.ellipse(0, h * 0.34, w * 0.42, h * 0.12, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.drawImage(keyedFrame, -w / 2, -h / 2, w, h);
       ctx.restore();
     }
@@ -926,10 +1069,16 @@
       const windows = [
         { key: "sw", start: beat(8), end: beat(20), x: 330, y: 760, w: 360, h: 520, rot: -0.08, mirror: false },
         { key: "james", start: beat(9), end: beat(20), x: 1580, y: 760, w: 360, h: 520, rot: 0.08, mirror: true },
+        { key: "sw", start: beat(28), end: beat(42), x: 230, y: 770, w: 330, h: 500, rot: -0.18, mirror: false },
+        { key: "james", start: beat(42), end: beat(58), x: 1700, y: 770, w: 330, h: 500, rot: 0.18, mirror: true },
         { key: "sw", start: beat(72), end: beat(112), x: 310, y: 790, w: 330, h: 500, rot: -0.1, mirror: false },
         { key: "james", start: beat(74), end: beat(112), x: 1600, y: 790, w: 330, h: 500, rot: 0.1, mirror: true },
+        { key: "sw", start: beat(118), end: beat(134), x: 560, y: 820, w: 280, h: 430, rot: -0.04, mirror: true },
+        { key: "james", start: beat(132), end: beat(150), x: 1360, y: 820, w: 280, h: 430, rot: 0.04, mirror: false },
         { key: "sw", start: beat(164), end: beat(204), x: 300, y: 790, w: 330, h: 500, rot: -0.08, mirror: false },
         { key: "james", start: beat(166), end: beat(204), x: 1610, y: 790, w: 330, h: 500, rot: 0.08, mirror: true },
+        { key: "sw", start: beat(205), end: beat(222), x: 760, y: 805, w: 300, h: 450, rot: 0.03, mirror: false },
+        { key: "james", start: beat(210), end: beat(228), x: 1160, y: 805, w: 300, h: 450, rot: -0.03, mirror: true },
         { key: "sw", start: beat(224), end: DURATION, x: 360, y: 790, w: 360, h: 520, rot: -0.06, mirror: false },
         { key: "james", start: beat(225), end: DURATION, x: 1560, y: 790, w: 360, h: 520, rot: 0.06, mirror: true }
       ];
@@ -948,8 +1097,10 @@
       const scene = sceneAt(seconds);
       const p = sceneProgress(scene, seconds);
       const classic = currentVersionKey === "classic";
+      const boss = currentVersionKey === "boss";
 
       drawBackground(t);
+      drawVersionAtmosphere(t);
 
       if (scene.kind === "opening") {
         drawOpeningLogo(seconds, scene, p);
@@ -971,7 +1122,7 @@
         drawPhoneZoom(1190 + 120 * (1 - a), 526, 360, 640, 0.92 + 0.13 * a + 0.045 * Math.cos(seconds * 3.1), 0.16, {
           type: "scanner", title: "부스", pill: "SCAN", main: "스캔 완료", sub: "서버 기록"
         }, p, a);
-        drawComicBurst(960, 522, 78 + Math.sin(seconds * (classic ? 4 : 8)) * 8, a * (classic ? 0.14 : 0.38), seconds, classic ? "rgba(254,243,199,0.42)" : "rgba(96,165,250,0.7)");
+        drawComicBurst(960, 522, 78 + Math.sin(seconds * (boss ? 10 : classic ? 4 : 8)) * 8, a * (boss ? 0.52 : classic ? 0.14 : 0.38), seconds, boss ? "rgba(220,38,38,0.72)" : classic ? "rgba(254,243,199,0.42)" : "rgba(96,165,250,0.7)");
       }
 
       if (scene.kind === "stamp") {
@@ -979,9 +1130,9 @@
         drawPhoneZoom(1240, 530, 390, 690, 0.76 + 0.34 * snap(Math.sin(p * Math.PI)), -0.04 + 0.03 * Math.sin(seconds * 1.6), {
           type: "stamp", title: "스탬프", pill: "OK", main: "지급 완료", sub: "기록에 저장"
         }, p, a);
-        drawComicBurst(1160, 300, 86 + Math.sin(seconds * (classic ? 4 : 9)) * 10, a * (classic ? 0.16 : 0.44), seconds, classic ? "rgba(254,243,199,0.38)" : "rgba(250,204,21,0.78)");
-        drawHalftone(260, 690, a * (classic ? 0.04 : 0.16));
-        drawParticles(960, 520, classic ? p * 0.72 : p);
+        drawComicBurst(1160, 300, 86 + Math.sin(seconds * (boss ? 11 : classic ? 4 : 9)) * 10, a * (boss ? 0.58 : classic ? 0.16 : 0.44), seconds, boss ? "rgba(250,204,21,0.74)" : classic ? "rgba(254,243,199,0.38)" : "rgba(250,204,21,0.78)");
+        drawHalftone(260, 690, a * (boss ? 0.22 : classic ? 0.04 : 0.16));
+        drawParticles(960, 520, boss ? p * 1.15 : classic ? p * 0.72 : p);
       }
 
       if (scene.kind === "coupon" || scene.kind === "couponMove") {
@@ -1009,7 +1160,7 @@
           const x = [270, 1010, 430, 1160][index];
           const y = [245, 245, 570, 570][index];
           drawRewardCard(asset, x, y, 430, 270, a, 0.86 + a * 0.16 + Math.sin(seconds * 5 + index) * 0.015);
-          if (a > 0.05) drawComicBurst(x + 382, y + 46, 40, a * (classic ? 0.07 : 0.18), seconds + index, classic ? "rgba(254,243,199,0.42)" : `${asset.color}aa`);
+          if (a > 0.05) drawComicBurst(x + 382, y + 46, 40, a * (boss ? 0.28 : classic ? 0.07 : 0.18), seconds + index, boss ? "rgba(220,38,38,0.72)" : classic ? "rgba(254,243,199,0.42)" : `${asset.color}aa`);
         });
       }
 
@@ -1032,8 +1183,8 @@
       const seconds = audio.paused ? ((now - startTime) / 1000) % DURATION : Math.min(audio.currentTime, DURATION);
       drawScene(seconds);
       if (!recording && playing && audio.currentTime >= DURATION - 0.05) {
-        audio.currentTime = 0;
-        audio.play().catch(() => undefined);
+        playNextVersion();
+        return;
       }
       if (playing || recording) loopId = requestAnimationFrame(loop);
     }
@@ -1064,7 +1215,7 @@
       lyricCues = buildLyricCues();
       updateVersionButtons();
       audio.pause();
-      audio.loop = true;
+      audio.loop = false;
       audio.src = currentVersion.src;
       audio.load();
       audio.currentTime = 0;
@@ -1072,6 +1223,16 @@
       statusEl.textContent = `${currentVersion.label} 준비`;
       drawScene(0);
       if (wasPlaying) play();
+    }
+
+    function nextVersionKey() {
+      const index = VERSION_ORDER.indexOf(currentVersionKey);
+      return VERSION_ORDER[(index + 1) % VERSION_ORDER.length] || VERSION_ORDER[0];
+    }
+
+    function playNextVersion() {
+      setAudioVersion(nextVersionKey(), false);
+      play();
     }
 
     async function play() {
@@ -1083,7 +1244,7 @@
       try {
         if (audioContext?.state === "suspended") await audioContext.resume();
         audio.currentTime = 0;
-        audio.loop = true;
+        audio.loop = false;
         await startOverlayVideos();
         await audio.play();
       } catch {
@@ -1183,8 +1344,7 @@
     });
     audio.addEventListener("ended", () => {
       if (playing && !recording) {
-        audio.currentTime = 0;
-        audio.play().catch(() => undefined);
+        playNextVersion();
       }
     });
 

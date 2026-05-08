@@ -18,6 +18,7 @@ const SHOWCASE_HTML = path.join(
 
 function serverShowcaseHtml(html: string) {
   return html
+    .replaceAll("./stampws-audio-boss.mp3", "/api/admin/showcase/assets?name=stampws-audio-boss.mp3")
     .replaceAll("./stampws-audio-classic.mp3", "/api/admin/showcase/assets?name=stampws-audio-classic.mp3")
     .replaceAll("./stampws-audio.mp3", "/api/admin/showcase/assets?name=stampws-audio.mp3")
     .replaceAll("../../SW.mp4", "/api/admin/showcase/assets?name=SW.mp4")
