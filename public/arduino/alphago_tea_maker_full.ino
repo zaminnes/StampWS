@@ -193,6 +193,45 @@ int commandPart(String command, int index, int fallback) {
   return value.length() ? value.toInt() : fallback;
 }
 
+String commandTextPart(String command, int index, String fallback) {
+  int start = 0;
+  for (int i = 0; i < index; i++) {
+    start = command.indexOf(',', start);
+    if (start < 0) return fallback;
+    start += 1;
+  }
+  int end = command.indexOf(',', start);
+  String value = end < 0 ? command.substring(start) : command.substring(start, end);
+  value.trim();
+  return value.length() ? value : fallback;
+}
+
+void runSinglePump(int pin, int seconds, const char* status, bool force) {
+  if (isBrewing) {
+    reportStatus("ERROR:BUSY");
+    return;
+  }
+  if (!force && !cupPresent()) {
+    reportStatus("ERROR:NO_CUP");
+    lcdPrint("Place Cup", "Try Again");
+    return;
+  }
+
+  isBrewing = true;
+  reportStatus(status);
+  digitalWrite(pin, HIGH);
+  safeDelay(constrain(seconds, 1, 90) * 1000);
+  digitalWrite(pin, LOW);
+  isBrewing = false;
+  reportStatus("SYSTEM_READY");
+}
+
+void runStepperCommand(String direction, int steps) {
+  reportStatus(direction == "DOWN" ? "MIXER_LOWERING" : "LIFTING");
+  moveStepper(direction == "DOWN", constrain(steps, 1, 9000));
+  reportStatus("SYSTEM_READY");
+}
+
 void handleCommand(String command) {
   command.trim();
   command.toUpperCase();
@@ -213,6 +252,33 @@ void handleCommand(String command) {
   if (command.startsWith("CUP,")) {
     cupThreshold = constrain(commandPart(command, 1, cupThreshold), 0, 1023);
     reportStatus("CONFIG_UPDATED");
+    return;
+  }
+  if (command.startsWith("WATER,") || command.startsWith("FORCE_WATER,")) {
+    runSinglePump(waterPump, commandPart(command, 1, defaultWaterSeconds), "DISPENSING:WATER", command.startsWith("FORCE_WATER,"));
+    return;
+  }
+  if (command.startsWith("TEA,") || command.startsWith("FORCE_TEA,")) {
+    runSinglePump(icedTeaPump, commandPart(command, 1, defaultTeaSeconds), "DISPENSING:TEA", command.startsWith("FORCE_TEA,"));
+    return;
+  }
+  if (command.startsWith("SERVO,")) {
+    mixerServo.write(constrain(commandPart(command, 1, 90), 0, 180));
+    reportStatus("SERVO_UPDATED");
+    return;
+  }
+  if (command.startsWith("STEPPER,")) {
+    runStepperCommand(commandTextPart(command, 1, "UP"), commandPart(command, 2, 800));
+    return;
+  }
+  if (command == "MIX") {
+    mixDrink();
+    reportStatus("SYSTEM_READY");
+    return;
+  }
+  if (command.startsWith("SLEEP,")) {
+    safeDelay(constrain(commandPart(command, 1, 1000), 1, 60000));
+    reportStatus("SYSTEM_READY");
     return;
   }
   if (command.startsWith("T,") || command.startsWith("FORCE,")) {

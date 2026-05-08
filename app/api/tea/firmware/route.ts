@@ -38,7 +38,8 @@ export async function GET(request: NextRequest) {
     const current = await requireCurrentSession(request);
     assertTeaMakerAccess(current.account);
     const db = await readDb();
-    const firmwareText = db.meta.arduinoFirmwareText || (await defaultFirmwareText());
+    const useDefault = request.nextUrl.searchParams.get("default") === "1";
+    const firmwareText = useDefault ? await defaultFirmwareText() : db.meta.arduinoFirmwareText || (await defaultFirmwareText());
     const updatedAt = db.meta.arduinoFirmwareUpdatedAt;
 
     if (request.nextUrl.searchParams.get("raw") === "1") {
@@ -53,8 +54,8 @@ export async function GET(request: NextRequest) {
 
     return jsonOk({
       firmwareText,
-      updatedAt,
-      source: db.meta.arduinoFirmwareText ? "storage" : "default"
+      updatedAt: useDefault ? undefined : updatedAt,
+      source: !useDefault && db.meta.arduinoFirmwareText ? "storage" : "default"
     });
   } catch (error) {
     return jsonError(error);

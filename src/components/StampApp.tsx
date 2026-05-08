@@ -2794,6 +2794,22 @@ function TeaMakerPanel() {
     setMessage(`${file.name} 불러옴`);
   }
 
+  async function loadDefaultFirmware() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const data = await apiJson<TeaFirmwarePayload>("/api/tea/firmware?default=1", { method: "GET" });
+      setFirmwareText(data.firmwareText);
+      setFirmwareUpdatedAt(data.updatedAt || "");
+      setFirmwareSource("default");
+      setMessage("명령 펌웨어 불러옴");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "기본본 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function updateArduinoButton(id: string, patch: Partial<Pick<ArduinoButtonView, "label" | "scriptText">>) {
     setArduinoButtons((current) => current.map((button) => (
       button.id === id ? { ...button, ...patch, updatedAt: new Date().toISOString() } : button
@@ -2963,7 +2979,7 @@ function TeaMakerPanel() {
                     value={button.scriptText}
                     onChange={(event) => updateArduinoButton(button.id, { scriptText: event.target.value })}
                   />
-                  <p className="hintText">Serial.println("T,15,20"); / FORCE,15,20 / STOP / delay(1000). 저장 후 모든 관리자에게 적용.</p>
+                  <p className="hintText">C++ 주입 아님. 펌웨어 명령 전송: T,15,20 / WATER,3 / TEA,3 / SERVO,90 / STEPPER,DOWN,2000 / MIX.</p>
                 </div>
               );
             })}
@@ -2982,6 +2998,7 @@ function TeaMakerPanel() {
                 업로드
                 <input accept=".ino,text/plain" onChange={(event) => loadFirmwareFile(event.target.files?.[0]).catch((err) => setMessage(err instanceof Error ? err.message : "파일 실패"))} type="file" />
               </label>
+              <button className="secondaryButton" disabled={busy} onClick={loadDefaultFirmware} type="button">기본본</button>
               <a className="secondaryLink" href="/api/tea/firmware?raw=1" target="_blank" rel="noreferrer">다운로드</a>
               <button className="primaryButton" disabled={busy || firmwareText.trim().length < 200} onClick={saveFirmware} type="button">저장</button>
             </div>
