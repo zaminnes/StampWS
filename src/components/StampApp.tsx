@@ -3135,7 +3135,7 @@ function RewardStockPanel({ compact = false }: { compact?: boolean }) {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const data = await apiJson<RewardStockPayload>("/api/rewards/stock", { method: "GET" });
+    const data = await apiJson<RewardStockPayload>("/api/tea/stock?scope=rewards", { method: "GET" });
     setRewards(data.rewards);
     setDrafts(Object.fromEntries(data.rewards.map((reward) => [reward.id, rewardStockCount(reward) ?? 0])));
   }, []);
@@ -3148,7 +3148,7 @@ function RewardStockPanel({ compact = false }: { compact?: boolean }) {
     setBusy(true);
     setMessage("");
     try {
-      const data = await apiJson<RewardStockPayload>("/api/rewards/stock", {
+      const data = await apiJson<RewardStockPayload>("/api/tea/stock?scope=rewards", {
         method: "PATCH",
         body: JSON.stringify({ rewardId: reward.id, stockCount: drafts[reward.id] ?? 0 })
       });
