@@ -16,8 +16,15 @@ const SHOWCASE_HTML = path.join(
   "stampws-showcase.html"
 );
 
-function serverShowcaseHtml(html: string) {
+function normalizeSong(value: string | null) {
+  return value === "classic" || value === "boss" || value === "original" ? value : "classic";
+}
+
+function serverShowcaseHtml(html: string, song: string) {
   return html
+    .replaceAll("__STAMPWS_INITIAL_VERSION__", song)
+    .replaceAll("./stampws-audio-boss.mp3", "/api/admin/showcase/assets?name=stampws-audio-boss.mp3")
+    .replaceAll("./stampws-audio-classic.mp3", "/api/admin/showcase/assets?name=stampws-audio-classic.mp3")
     .replaceAll("./stampws-audio.mp3", "/api/admin/showcase/assets?name=stampws-audio.mp3")
     .replaceAll("../../SW.mp4", "/api/admin/showcase/assets?name=SW.mp4")
     .replaceAll("../../James.mp4", "/api/admin/showcase/assets?name=James.mp4")
@@ -28,7 +35,8 @@ function serverShowcaseHtml(html: string) {
 export async function GET(request: NextRequest) {
   try {
     await requireRole(request, ["superAdmin"]);
-    const html = serverShowcaseHtml(await readFile(SHOWCASE_HTML, "utf8"));
+    const song = normalizeSong(request.nextUrl.searchParams.get("song"));
+    const html = serverShowcaseHtml(await readFile(SHOWCASE_HTML, "utf8"), song);
 
     return new NextResponse(html, {
       headers: {

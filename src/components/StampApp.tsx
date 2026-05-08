@@ -3020,14 +3020,15 @@ function TeaMakerPanel() {
 }
 
 function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
-  function openShowcaseWindow() {
-    const opened = window.open("/showcase", "stampwsShowcase", "width=1280,height=720");
+  function openShowcaseWindow(song: "classic" | "boss" | "original" = "classic") {
+    const url = `/showcase?song=${song}`;
+    const opened = window.open(url, `stampwsShowcase-${song}`, "width=1280,height=720");
     if (opened) {
       opened.opener = null;
       opened.focus();
       return;
     }
-    window.location.href = "/showcase";
+    window.location.href = url;
   }
 
   return (
@@ -3038,7 +3039,12 @@ function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<voi
             <h2>총괄</h2>
             <p>서버 기록 기준.</p>
           </div>
-          <button className="secondaryButton" onClick={openShowcaseWindow} type="button">소개창</button>
+          <button className="secondaryButton" onClick={() => openShowcaseWindow("classic")} type="button">소개창</button>
+        </div>
+        <div className="canvasTools">
+          <button className="secondaryButton" onClick={() => openShowcaseWindow("classic")} type="button">클래식</button>
+          <button className="secondaryButton" onClick={() => openShowcaseWindow("boss")} type="button">파이널</button>
+          <button className="secondaryButton" onClick={() => openShowcaseWindow("original")} type="button">원곡</button>
         </div>
         <div className="metricGrid">
           <div><strong>{me.adminSummary?.participantCount || 0}</strong><span>참가자</span></div>

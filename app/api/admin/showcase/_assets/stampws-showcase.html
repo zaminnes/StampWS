@@ -186,6 +186,7 @@
     const W = canvas.width;
     const H = canvas.height;
     const ORIGINAL_DURATION = 112.464;
+    const EMBEDDED_INITIAL_VERSION = "__STAMPWS_INITIAL_VERSION__";
     const VERSION_ORDER = ["classic", "boss", "original"];
     const AUDIO_VERSIONS = {
       classic: {
@@ -193,25 +194,37 @@
         src: "./stampws-audio-classic.mp3",
         duration: 107.12,
         totalBeats: 224,
-        beatOffset: 0.38
+        beatOffset: 0.38,
+        lyricStart: 6.45
       },
       boss: {
         label: "파이널",
         src: "./stampws-audio-boss.mp3",
         duration: 112.68,
         totalBeats: 240,
-        beatOffset: 0.32
+        beatOffset: 0.32,
+        lyricStart: 10.0
       },
       original: {
         label: "원곡",
         src: "./stampws-audio.mp3",
         duration: ORIGINAL_DURATION,
         totalBeats: 240,
-        beatOffset: 0.464
+        beatOffset: 0.464,
+        lyricStart: 6.5
       }
     };
-    let currentVersionKey = "classic";
+
+    function initialVersionKey() {
+      const fromQuery = new URLSearchParams(window.location.search).get("song") || "";
+      if (AUDIO_VERSIONS[fromQuery]) return fromQuery;
+      if (AUDIO_VERSIONS[EMBEDDED_INITIAL_VERSION]) return EMBEDDED_INITIAL_VERSION;
+      return "classic";
+    }
+
+    let currentVersionKey = initialVersionKey();
     let currentVersion = AUDIO_VERSIONS[currentVersionKey];
+    audio.src = currentVersion.src;
     let DURATION = currentVersion.duration;
     let TOTAL_BEATS = currentVersion.totalBeats;
     let BEAT_OFFSET = currentVersion.beatOffset;
@@ -237,23 +250,25 @@
       BPM = 60 / BEAT;
     }
 
-    function scaledTime(seconds) {
-      return seconds * (DURATION / ORIGINAL_DURATION);
+    function lyricMappedTime(seconds) {
+      const lyricStart = currentVersion.lyricStart || 0;
+      if (seconds <= 0) return lyricStart;
+      return lyricStart + seconds * ((DURATION - lyricStart) / ORIGINAL_DURATION);
     }
 
     function buildScenes() {
       return [
-        { at: 0, end: scaledTime(4.00), kind: "opening", sub: "우신고에서 / 스탬프제가?" },
-        { at: scaledTime(4.00), end: scaledTime(8.00), kind: "entry", sub: "학번 / 입장 / 내 QR" },
-        { at: scaledTime(8.00), end: scaledTime(17.00), kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
-        { at: scaledTime(17.00), end: scaledTime(31.00), kind: "stamp", sub: "찍으면 바로 보여" },
-        { at: scaledTime(31.00), end: scaledTime(37.00), kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
-        { at: scaledTime(37.00), end: scaledTime(47.00), kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
-        { at: scaledTime(47.00), end: scaledTime(62.00), kind: "redeem", sub: "우신고에서 스탬프제가?" },
-        { at: scaledTime(62.00), end: scaledTime(69.00), kind: "rewards", sub: "달고나 / 콩가루차 / 팝콘 / 아이스티" },
-        { at: scaledTime(69.00), end: scaledTime(79.00), kind: "end", sub: "찍고, 모으고, 받자" },
-        { at: scaledTime(79.00), end: scaledTime(107.00), kind: "stamp", sub: "우신고에서 스탬프제가?" },
-        { at: scaledTime(107.00), end: DURATION, kind: "end", sub: "찍고, 모으고, 받자" }
+        { at: 0, end: lyricMappedTime(4.00), kind: "opening", sub: "우신고에서 / 스탬프제가?" },
+        { at: lyricMappedTime(4.00), end: lyricMappedTime(8.00), kind: "entry", sub: "학번 / 입장 / 내 QR" },
+        { at: lyricMappedTime(8.00), end: lyricMappedTime(17.00), kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
+        { at: lyricMappedTime(17.00), end: lyricMappedTime(31.00), kind: "stamp", sub: "찍으면 바로 보여" },
+        { at: lyricMappedTime(31.00), end: lyricMappedTime(37.00), kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
+        { at: lyricMappedTime(37.00), end: lyricMappedTime(47.00), kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
+        { at: lyricMappedTime(47.00), end: lyricMappedTime(62.00), kind: "redeem", sub: "우신고에서 스탬프제가?" },
+        { at: lyricMappedTime(62.00), end: lyricMappedTime(69.00), kind: "rewards", sub: "달고나 / 콩가루차 / 팝콘 / 아이스티" },
+        { at: lyricMappedTime(69.00), end: lyricMappedTime(79.00), kind: "end", sub: "찍고, 모으고, 받자" },
+        { at: lyricMappedTime(79.00), end: lyricMappedTime(107.00), kind: "stamp", sub: "우신고에서 스탬프제가?" },
+        { at: lyricMappedTime(107.00), end: DURATION, kind: "end", sub: "찍고, 모으고, 받자" }
       ];
     }
 
@@ -377,13 +392,12 @@
     ];
 
     function buildLyricCues() {
-      const ratio = DURATION / ORIGINAL_DURATION;
       const isClassic = currentVersionKey === "classic";
       const isBoss = currentVersionKey === "boss";
       return originalLyricCues.map((cue) => ({
         ...cue,
-        at: Number((cue.at * ratio).toFixed(3)),
-        end: Number((Math.min(cue.end, ORIGINAL_DURATION) * ratio).toFixed(3)),
+        at: Number(lyricMappedTime(cue.at).toFixed(3)),
+        end: Number(lyricMappedTime(Math.min(cue.end, ORIGINAL_DURATION)).toFixed(3)),
         size: Math.round(cue.size * (isBoss ? 1.04 : isClassic ? 0.94 : 1))
       }));
     }
@@ -1358,6 +1372,7 @@
       if (!playing && !recording) play();
     });
 
+    updateVersionButtons();
     drawScene(0);
   </script>
 </body>
