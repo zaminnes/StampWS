@@ -4,6 +4,7 @@ import { clientFingerprint, hashFingerprint, randomId, verifyCouponQrToken, veri
 import { updateDb } from "@/lib/db";
 import { assertContentLength, assertSameOrigin, HttpError, jsonError, jsonOk } from "@/lib/http";
 import { rateLimit } from "@/lib/rate-limit";
+import { assertRewardSelectable, decrementRewardStock } from "@/lib/reward-stock";
 import { STAMP_REWARD_THRESHOLD } from "@/lib/stamp-config";
 import type { RewardId } from "@/lib/types";
 
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
 
         const reward = db.rewards.find((item) => item.id === rewardId && item.active);
         if (!reward) throw new HttpError(404, "보상을 찾을 수 없습니다.");
+        assertRewardSelectable(reward, { stampReward: true });
 
         const tempPass = db.tempPasses.find((item) => item.id === parsedTempPassToken.tempPassId);
         if (!tempPass || tempPass.status === "voided") throw new HttpError(404, "임시 QR을 찾을 수 없습니다.");
@@ -44,6 +46,7 @@ export async function POST(request: NextRequest) {
         }
 
         const now = new Date().toISOString();
+        const stockCount = decrementRewardStock(db, reward.id, actor.id, now, { stampReward: true });
         tempPass.status = "redeemed";
         tempPass.redeemedAt = now;
         tempPass.redeemedByAccountId = actor.id;
@@ -60,6 +63,7 @@ export async function POST(request: NextRequest) {
           metadata: {
             tempPassLabel: tempPass.label,
             rewardId: reward.id,
+            stockCount: stockCount ?? null,
             stampCount: tempPass.stamps.length
           }
         });
@@ -84,8 +88,10 @@ export async function POST(request: NextRequest) {
       const participant = db.accounts.find((item) => item.id === coupon.participantAccountId);
       const reward = db.rewards.find((item) => item.id === coupon.rewardId);
       if (!participant || !reward) throw new HttpError(404, "쿠폰 정보를 찾을 수 없습니다.");
+      assertRewardSelectable(reward, { stampReward: true });
 
       const now = new Date().toISOString();
+      const stockCount = decrementRewardStock(db, reward.id, actor.id, now, { stampReward: true });
       coupon.status = "redeemed";
       coupon.redeemedAt = now;
       coupon.redeemedByAccountId = actor.id;
@@ -99,7 +105,8 @@ export async function POST(request: NextRequest) {
         userAgentHash: await hashFingerprint(userAgent),
         metadata: {
           participantAccountId: participant.id,
-          rewardId: reward.id
+          rewardId: reward.id,
+          stockCount: stockCount ?? null
         }
       });
 

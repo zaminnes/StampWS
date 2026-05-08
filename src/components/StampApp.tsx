@@ -15,6 +15,8 @@ type Reward = {
   name: string;
   clubName: string;
   imagePath: string;
+  stockCount?: number;
+  stockUpdatedAt?: string;
   active: boolean;
 };
 
@@ -119,6 +121,10 @@ type ArduinoButtonView = {
 type TeaButtonsPayload = {
   buttons: ArduinoButtonView[];
   updatedAt?: string;
+};
+
+type RewardStockPayload = {
+  rewards: Reward[];
 };
 
 type ClubNoticeView = {
@@ -384,6 +390,26 @@ function rewardNameById(rewardId?: Reward["id"]) {
 function rewardDetail(rewardId?: Reward["id"]) {
   if (!rewardId) return "";
   return REWARD_KO[rewardId]?.detail || "";
+}
+
+function rewardStockCount(reward?: Reward) {
+  return typeof reward?.stockCount === "number" ? Math.max(0, Math.floor(reward.stockCount)) : undefined;
+}
+
+function rewardIgnoresStampStock(rewardId?: Reward["id"]) {
+  return rewardId === "alphago";
+}
+
+function rewardSoldOutForStamp(reward?: Reward) {
+  if (!reward || rewardIgnoresStampStock(reward.id)) return false;
+  return rewardStockCount(reward) === 0;
+}
+
+function rewardStockLabel(reward?: Reward) {
+  if (!reward) return "";
+  if (rewardIgnoresStampStock(reward.id)) return "쿠폰 재고 제외";
+  const stock = rewardStockCount(reward);
+  return typeof stock === "number" ? `${stock}개` : "재고 미설정";
 }
 
 function RewardImage({ reward, className = "" }: { reward?: Reward; className?: string }) {
@@ -1087,6 +1113,8 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
   const [error, setError] = useState("");
   const rewards = me.rewards || [];
   const couponReward = rewards.find((reward) => reward.id === me.coupon?.rewardId);
+  const selectedRewardItem = rewards.find((reward) => reward.id === selectedReward);
+  const couponCanChange = Boolean(me.coupon && me.coupon.status === "unused" && rewardSoldOutForStamp(couponReward));
   const stamps = me.stamps || [];
   const progress = Math.min(me.stats?.stampCount || 0, STAMP_REWARD_THRESHOLD);
   const remaining = Math.max(STAMP_REWARD_THRESHOLD - progress, 0);
@@ -1094,6 +1122,13 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
   const couponStatus = me.coupon
     ? me.coupon.status === "unused" ? "사용 가능" : "사용 완료"
     : me.stats?.couponEligible ? "변환 가능" : "대기";
+
+  useEffect(() => {
+    if (!rewards.length) return;
+    if (selectedRewardItem && !rewardSoldOutForStamp(selectedRewardItem)) return;
+    const firstAvailable = rewards.find((reward) => !rewardSoldOutForStamp(reward));
+    if (firstAvailable) setSelectedReward(firstAvailable.id);
+  }, [rewards, selectedRewardItem]);
 
   async function createCoupon() {
     setError("");
@@ -1166,30 +1201,68 @@ function ParticipantHome({ me, refresh }: { me: MePayload; refresh: () => Promis
               <RewardImage reward={couponReward} className="couponRewardImage" />
               <p className="couponTitle">{rewardLabel(couponReward)}</p>
               {rewardDetail(couponReward?.id) && <p className="rewardDetail">{rewardDetail(couponReward?.id)}</p>}
+              <p className="rewardDetail">{rewardStockLabel(couponReward)}</p>
               <p className={`pill ${me.coupon.status === "unused" ? "ok" : "done"}`}>
-                {me.coupon.status === "unused" ? "사용 가능" : `사용 완료 ${formatTime(me.coupon.redeemedAt)}`}
+                {couponCanChange ? "교체 가능" : me.coupon.status === "unused" ? "사용 가능" : `사용 완료 ${formatTime(me.coupon.redeemedAt)}`}
               </p>
             </div>
             <QrImage token={me.coupon.qrToken} label="쿠폰 QR" />
+            {couponCanChange && (
+              <div className="couponChangeBox">
+                <div className="sectionHeader compactHeader">
+                  <div>
+                    <h2>교체</h2>
+                    <p>품절 보상 변경.</p>
+                  </div>
+                </div>
+                <div className="rewardGrid compactRewardGrid">
+                  {rewards.map((reward) => {
+                    const soldOut = rewardSoldOutForStamp(reward);
+                    return (
+                      <button
+                        className={`rewardChoice ${selectedReward === reward.id ? "selected" : ""} ${soldOut ? "soldOut" : ""}`}
+                        disabled={soldOut || reward.id === me.coupon?.rewardId}
+                        key={reward.id}
+                        onClick={() => setSelectedReward(reward.id)}
+                        type="button"
+                      >
+                        <img src={rewardImagePath(reward.id)} alt={reward.name} />
+                        <span>{rewardLabel(reward)}</span>
+                        <small>{soldOut ? "품절" : rewardStockLabel(reward)}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+                {error && <p className="errorText">{error}</p>}
+                <button className="primaryButton" disabled={!selectedRewardItem || rewardSoldOutForStamp(selectedRewardItem) || selectedReward === me.coupon.rewardId} onClick={createCoupon} type="button">
+                  교체
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <>
             <div className="rewardGrid">
-              {rewards.map((reward) => (
-                <button
-                  className={`rewardChoice ${selectedReward === reward.id ? "selected" : ""}`}
-                  key={reward.id}
-                  onClick={() => setSelectedReward(reward.id)}
-                  type="button"
-                >
-                  <img src={rewardImagePath(reward.id)} alt={reward.name} />
-                  <span>{rewardLabel(reward)}</span>
-                  {rewardDetail(reward.id) && <small>{rewardDetail(reward.id)}</small>}
-                </button>
-              ))}
+              {rewards.map((reward) => {
+                const soldOut = rewardSoldOutForStamp(reward);
+                return (
+                  <button
+                    className={`rewardChoice ${selectedReward === reward.id ? "selected" : ""} ${soldOut ? "soldOut" : ""}`}
+                    disabled={soldOut}
+                    key={reward.id}
+                    onClick={() => setSelectedReward(reward.id)}
+                    type="button"
+                  >
+                    <img src={rewardImagePath(reward.id)} alt={reward.name} />
+                    <span>{rewardLabel(reward)}</span>
+                    <small>{soldOut ? "품절" : rewardStockLabel(reward)}</small>
+                    {rewardDetail(reward.id) && <small>{rewardDetail(reward.id)}</small>}
+                  </button>
+                );
+              })}
             </div>
             {error && <p className="errorText">{error}</p>}
-            <button className="primaryButton" disabled={(me.stats?.stampCount || 0) < STAMP_REWARD_THRESHOLD} onClick={createCoupon} type="button">
+            <button className="primaryButton" disabled={(me.stats?.stampCount || 0) < STAMP_REWARD_THRESHOLD || !selectedRewardItem || rewardSoldOutForStamp(selectedRewardItem)} onClick={createCoupon} type="button">
               변환
             </button>
           </>
@@ -1249,6 +1322,7 @@ function TeaReservationCard({ me }: { me: MePayload }) {
   const reservationTime = latestReservation ? formatTime(latestReservation.updatedAt) : "바로 예약";
   const hasTeaCoupon = me.coupon?.rewardId === "alphago" && me.coupon.status === "unused";
   const priorityText = hasTeaCoupon ? "쿠폰 우선 적용" : "쿠폰 선택 시 우선";
+  const teaSoldOutForOnline = stockCount <= 0 && !hasTeaCoupon;
 
   async function createReservation() {
     setBusy(true);
@@ -1309,8 +1383,8 @@ function TeaReservationCard({ me }: { me: MePayload }) {
           <span>요청 메모</span>
           <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={60} placeholder="얼음 적게" />
         </label>
-        <button className="teaReserveCta" disabled={busy || Boolean(activeReservation) || stockCount <= 0} onClick={createReservation} type="button">
-          {busy ? "처리중" : activeReservation ? "진행중" : stockCount <= 0 ? "품절" : "예약구매"}
+        <button className="teaReserveCta" disabled={busy || Boolean(activeReservation) || teaSoldOutForOnline} onClick={createReservation} type="button">
+          {busy ? "처리중" : activeReservation ? "진행중" : teaSoldOutForOnline ? "품절" : hasTeaCoupon ? "쿠폰예약" : "예약구매"}
         </button>
       </div>
       {message && <p className={message.includes("실패") || message.includes("진행") ? "errorText" : "statusText"}>{message}</p>}
@@ -3054,6 +3128,77 @@ function TeaMakerPanel() {
   );
 }
 
+function RewardStockPanel({ compact = false }: { compact?: boolean }) {
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, number>>({});
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const data = await apiJson<RewardStockPayload>("/api/rewards/stock", { method: "GET" });
+    setRewards(data.rewards);
+    setDrafts(Object.fromEntries(data.rewards.map((reward) => [reward.id, rewardStockCount(reward) ?? 0])));
+  }, []);
+
+  useEffect(() => {
+    load().catch((err) => setMessage(err instanceof Error ? err.message : "재고 로드 실패"));
+  }, [load]);
+
+  async function saveRewardStock(reward: Reward) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const data = await apiJson<RewardStockPayload>("/api/rewards/stock", {
+        method: "PATCH",
+        body: JSON.stringify({ rewardId: reward.id, stockCount: drafts[reward.id] ?? 0 })
+      });
+      setRewards(data.rewards);
+      setDrafts(Object.fromEntries(data.rewards.map((item) => [item.id, rewardStockCount(item) ?? 0])));
+      setMessage(`${rewardLabel(reward)} 저장`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "재고 저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className={`panel ${compact ? "" : "widePanel"}`}>
+      <div className="sectionHeader">
+        <div>
+          <h2>보상재고</h2>
+          <p>0이면 품절.</p>
+        </div>
+        <button className="secondaryButton" onClick={() => load().catch((err) => setMessage(err instanceof Error ? err.message : "재고 로드 실패"))} type="button">새로고침</button>
+      </div>
+      <div className="rewardStockList">
+        {rewards.map((reward) => (
+          <div className="rewardStockRow" key={reward.id}>
+            <RewardImage reward={reward} />
+            <div>
+              <strong>{rewardLabel(reward)}</strong>
+              <span>{rewardIgnoresStampStock(reward.id) ? "스탬프 쿠폰 차감 없음" : `현재 ${rewardStockLabel(reward)}`}</span>
+            </div>
+            <label>
+              재고
+              <input
+                value={drafts[reward.id] ?? 0}
+                min={0}
+                max={5000}
+                onChange={(event) => setDrafts((current) => ({ ...current, [reward.id]: Number(event.target.value) }))}
+                type="number"
+              />
+            </label>
+            <button className="primaryButton" disabled={busy} onClick={() => saveRewardStock(reward)} type="button">저장</button>
+          </div>
+        ))}
+        {rewards.length === 0 && <p className="emptyText">관리 보상 없음</p>}
+      </div>
+      {message && <p className={message.includes("실패") ? "errorText" : "statusText"}>{message}</p>}
+    </section>
+  );
+}
+
 function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
   function openShowcaseWindow(song: "classic" | "boss" | "original" = "classic") {
     const url = `/showcase?song=${song}`;
@@ -3090,6 +3235,7 @@ function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<voi
           <div><strong>{me.adminSummary?.redeemedTempPassCount || 0}</strong><span>임시 지급</span></div>
         </div>
       </section>
+      <RewardStockPanel />
       <SuperAdminManualStampPanel me={me} refresh={refresh} />
       <DefaultStampPanel me={me} refresh={refresh} />
       <AccountAdminPanel />
@@ -3407,6 +3553,7 @@ export function StampApp({ initialTab = "home" }: { initialTab?: AppTab }) {
             <span>쿠폰 사용</span>
           </section>
           <Scanner label="쿠폰 QR 사용" onScan={handleCouponScan} />
+          <RewardStockPanel compact />
         </div>
       )}
       {!(role === "participant" && me.account.displayNameRequired) && tab === "codes" && <CodesPanel />}

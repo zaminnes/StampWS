@@ -66,6 +66,9 @@ export type RewardItem = {
   name: string;
   clubName: string;
   imagePath: string;
+  stockCount?: number;
+  stockUpdatedAt?: string;
+  stockUpdatedByAccountId?: string;
   active: boolean;
 };
 

@@ -623,6 +623,7 @@ function normalizeDb(db: StampDb) {
   }));
   db.rewards = REWARDS.map((reward) => ({
     ...reward,
+    ...(db.rewards.find((item) => item.id === reward.id) || {}),
     active: db.rewards.find((item) => item.id === reward.id)?.active ?? reward.active
   }));
   return db;

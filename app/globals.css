@@ -976,10 +976,30 @@ textarea {
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.09);
 }
 
+.rewardChoice.soldOut,
+.rewardChoice:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
+}
+
 .rewardChoice img {
   aspect-ratio: 1;
   object-fit: contain;
   width: 100%;
+}
+
+.compactRewardGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.couponChangeBox {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  padding-top: 14px;
 }
 
 .rewardVisual {
@@ -1730,6 +1750,41 @@ th {
   margin-top: 5px;
 }
 
+.rewardStockList {
+  display: grid;
+  gap: 10px;
+}
+
+.rewardStockRow {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 64px 1fr 120px auto;
+  padding: 12px;
+}
+
+.rewardStockRow .rewardVisual {
+  width: 64px;
+}
+
+.rewardStockRow strong {
+  color: var(--ink);
+  display: block;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.rewardStockRow span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
 .firmwarePanel {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -2313,6 +2368,7 @@ th {
   .securityGrid,
   .teaCustomerHero,
   .teaStockBox,
+  .rewardStockRow,
   .teaQueueRow {
     grid-template-columns: 1fr;
   }

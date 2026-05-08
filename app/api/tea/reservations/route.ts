@@ -85,8 +85,8 @@ export async function POST(request: NextRequest) {
       if (account.role === "participant") {
         const hasOpen = db.teaReservations.some((item) => item.participantAccountId === account.id && isOpenTeaReservation(item));
         if (hasOpen) throw new HttpError(409, "진행 중인 티 예약이 있습니다.");
-        if (teaStockCount(db) <= 0) throw new HttpError(409, "아이스티 재고가 없습니다.");
         const priority = hasTeaCouponPriority(db, account.id);
+        if (!priority && teaStockCount(db) <= 0) throw new HttpError(409, "아이스티 재고가 없습니다.");
 
         const reservation = {
           id: randomId("tea"),
@@ -173,7 +173,7 @@ export async function PATCH(request: NextRequest) {
       const now = new Date().toISOString();
       const action = body.action || "start";
       if (action === "start") {
-        if (!reservation.startedAt) {
+        if (!reservation.startedAt && reservation.source !== "reward") {
           decrementTeaStock(db, actor.id, now);
         }
         reservation.status = "brewing";
