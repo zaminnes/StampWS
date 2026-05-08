@@ -133,6 +133,15 @@ export type TeaReservation = {
   cancelledByAccountId?: string;
 };
 
+export type ArduinoButton = {
+  id: string;
+  label: string;
+  scriptText: string;
+  createdAt: string;
+  updatedAt: string;
+  updatedByAccountId?: string;
+};
+
 export type ClubNotice = {
   id: string;
   clubId: string;
@@ -223,6 +232,9 @@ export type StampDb = {
     arduinoFirmwareText?: string;
     arduinoFirmwareUpdatedAt?: string;
     arduinoFirmwareUpdatedByAccountId?: string;
+    arduinoButtons?: ArduinoButton[];
+    arduinoButtonsUpdatedAt?: string;
+    arduinoButtonsUpdatedByAccountId?: string;
     teaStockCount?: number;
     teaStockUpdatedAt?: string;
     teaStockUpdatedByAccountId?: string;

@@ -228,6 +228,8 @@ async function buildInitialDb() {
       version: 1,
       arduinoFirmwareText: defaultFirmwareText || undefined,
       arduinoFirmwareUpdatedAt: defaultFirmwareText ? now : undefined,
+      arduinoButtons: [],
+      arduinoButtonsUpdatedAt: now,
       teaStockCount: 0,
       teaStockUpdatedAt: now
     },
@@ -612,6 +614,7 @@ function normalizeDb(db: StampDb) {
   db.clubNotices ||= [];
   db.loginEvents ||= [];
   db.deviceBlocks ||= [];
+  db.meta.arduinoButtons ||= [];
   const existingBooths = new Map((db.booths || []).map((booth) => [booth.id, booth]));
   db.booths = BOOTHS.map((booth) => ({
     ...booth,
@@ -686,6 +689,9 @@ export async function resetDbToClubSetup(actorAccountId: string, ipHash: string,
     const firmwareText = db.meta.arduinoFirmwareText;
     const firmwareUpdatedAt = db.meta.arduinoFirmwareUpdatedAt;
     const firmwareUpdatedByAccountId = db.meta.arduinoFirmwareUpdatedByAccountId;
+    const arduinoButtons = db.meta.arduinoButtons;
+    const arduinoButtonsUpdatedAt = db.meta.arduinoButtonsUpdatedAt;
+    const arduinoButtonsUpdatedByAccountId = db.meta.arduinoButtonsUpdatedByAccountId;
     const teaStockCount = db.meta.teaStockCount;
     const teaStockUpdatedAt = db.meta.teaStockUpdatedAt;
     const teaStockUpdatedByAccountId = db.meta.teaStockUpdatedByAccountId;
@@ -697,6 +703,9 @@ export async function resetDbToClubSetup(actorAccountId: string, ipHash: string,
       arduinoFirmwareText: firmwareText,
       arduinoFirmwareUpdatedAt: firmwareUpdatedAt,
       arduinoFirmwareUpdatedByAccountId: firmwareUpdatedByAccountId,
+      arduinoButtons,
+      arduinoButtonsUpdatedAt,
+      arduinoButtonsUpdatedByAccountId,
       teaStockCount,
       teaStockUpdatedAt,
       teaStockUpdatedByAccountId

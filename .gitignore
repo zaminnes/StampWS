@@ -5,6 +5,13 @@ node_modules
 .DS_Store
 firebase-debug.log
 *.tsbuildinfo
+AI_KIOSK_Voice/
+/SW.mp4
+/James.mp4
+오답노터.html
+오답노터_files/
+오답노터.html
+오답노터_files/
 /*.png
 달고나.png
 아이스티.png

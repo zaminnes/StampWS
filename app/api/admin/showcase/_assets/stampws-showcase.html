@@ -1,0 +1,1077 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StampWS AE Phone Scenes</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f8fafc;
+      --muted: rgba(226, 232, 240, 0.76);
+      --panel: rgba(8, 13, 25, 0.58);
+      --line: rgba(255, 255, 255, 0.16);
+      --blue: #2563eb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      background: #050914;
+      color: var(--ink);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      height: 100vh;
+      object-fit: cover;
+      width: 100vw;
+    }
+
+    .controls {
+      align-items: center;
+      backdrop-filter: blur(24px);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      bottom: 22px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+      display: flex;
+      gap: 8px;
+      left: 50%;
+      padding: 8px;
+      position: fixed;
+      transform: translateX(-50%);
+      transition: opacity 220ms ease, transform 220ms ease;
+      z-index: 3;
+    }
+
+    .controls.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-50%) translateY(18px);
+    }
+
+    button,
+    a {
+      border: 0;
+      border-radius: 999px;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 900;
+      min-height: 38px;
+      padding: 0 14px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    button {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    button.primary,
+    a {
+      background: #fff;
+      color: #0f172a;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 0 8px;
+      white-space: nowrap;
+    }
+
+    .tap {
+      align-items: center;
+      backdrop-filter: blur(28px);
+      background: rgba(2, 6, 23, 0.72);
+      display: grid;
+      inset: 0;
+      justify-items: center;
+      padding: 24px;
+      position: fixed;
+      text-align: center;
+      z-index: 2;
+    }
+
+    .tap-card {
+      display: grid;
+      gap: 18px;
+      justify-items: center;
+    }
+
+    .tap-card strong {
+      display: block;
+      font-size: clamp(46px, 8vw, 108px);
+      font-weight: 950;
+      letter-spacing: -0.09em;
+      line-height: 0.86;
+    }
+
+    .tap-card span {
+      color: var(--muted);
+      font-size: 17px;
+      font-weight: 850;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene" width="1920" height="1080" aria-label="StampWS motion background"></canvas>
+  <audio id="audio" src="./stampws-audio.mp3" preload="auto"></audio>
+
+  <div class="tap" id="tap">
+    <div class="tap-card">
+      <strong>StampWS<br>AE Scenes</strong>
+      <span>한 번 터치하면 재생되고 반복됩니다.</span>
+      <button class="primary" type="button">재생</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="playButton" type="button">재생</button>
+    <button id="exportButton" type="button">MP4 내보내기</button>
+    <a href="https://stampws.kr">stampws.kr</a>
+    <span class="status" id="status">준비</span>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("scene");
+    const ctx = canvas.getContext("2d");
+    const tap = document.getElementById("tap");
+    const playButton = document.getElementById("playButton");
+    const exportButton = document.getElementById("exportButton");
+    const statusEl = document.getElementById("status");
+    const audio = document.getElementById("audio");
+    const W = canvas.width;
+    const H = canvas.height;
+    const DURATION = 112.464;
+    const TOTAL_BEATS = 240;
+    const BEAT_OFFSET = 0.464;
+    const BEAT = (DURATION - BEAT_OFFSET) / (TOTAL_BEATS - 1);
+    const BPM = 60 / BEAT;
+
+    let startTime = performance.now();
+    let playing = false;
+    let recording = false;
+    let loopId = 0;
+    let audioContext = null;
+    let audioSource = null;
+    let audioDestination = null;
+    const keyedVideoCanvas = document.createElement("canvas");
+    const keyedVideoCtx = keyedVideoCanvas.getContext("2d", { willReadFrequently: true });
+    let taintWarningShown = false;
+
+    const scenes = [
+      { at: 0, end: 4.00, kind: "opening", sub: "우신고에서 / 스탬프제가?" },
+      { at: 4.00, end: 8.00, kind: "entry", sub: "학번 / 입장 / 내 QR" },
+      { at: 8.00, end: 17.00, kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
+      { at: 17.00, end: 31.00, kind: "stamp", sub: "찍으면 바로 보여" },
+      { at: 31.00, end: 37.00, kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
+      { at: 37.00, end: 47.00, kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
+      { at: 47.00, end: 62.00, kind: "redeem", sub: "우신고에서 스탬프제가?" },
+      { at: 62.00, end: 69.00, kind: "rewards", sub: "달고나 / 콩가루차 / 팝콘 / 아이스티" },
+      { at: 69.00, end: 79.00, kind: "end", sub: "찍고, 모으고, 받자" },
+      { at: 79.00, end: 107.00, kind: "stamp", sub: "우신고에서 스탬프제가?" },
+      { at: 107.00, end: DURATION, kind: "end", sub: "찍고, 모으고, 받자" }
+    ];
+
+    const lyricCues = [
+      { at: 0.00, end: 1.40, text: "우신고에서", size: 138 },
+      { at: 1.40, end: 3.06, text: "스탬프제가?", size: 158 },
+      { at: 3.06, end: 5.54, text: "학번", size: 128 },
+      { at: 5.54, end: 5.98, text: "입장", size: 128 },
+      { at: 5.98, end: 6.54, text: "내 QR", size: 128 },
+      { at: 6.54, end: 8.28, text: "한 번", size: 112 },
+      { at: 8.28, end: 9.06, text: "찍어", size: 126 },
+      { at: 9.06, end: 10.24, text: "눈앞이", size: 104 },
+      { at: 10.24, end: 11.14, text: "바뀌어", size: 106 },
+      { at: 11.14, end: 12.54, text: "사라지기", size: 92 },
+      { at: 12.54, end: 13.02, text: "전에", size: 112 },
+      { at: 13.02, end: 15.54, text: "딱", size: 138 },
+      { at: 15.54, end: 16.16, text: "맞춰", size: 126 },
+      { at: 16.16, end: 18.38, text: "우신고에서", size: 116 },
+      { at: 18.38, end: 20.08, text: "스탬프제가?", size: 126 },
+      { at: 20.76, end: 22.18, text: "우신고에서", size: 116 },
+      { at: 22.92, end: 24.84, text: "스탬프제가?", size: 126 },
+      { at: 24.84, end: 25.54, text: "찍으면", size: 112 },
+      { at: 25.54, end: 29.58, text: "바로 보여", size: 106 },
+      { at: 32.00, end: 33.74, text: "다섯 개", size: 120 },
+      { at: 33.78, end: 34.44, text: "쿠폰", size: 132 },
+      { at: 34.44, end: 35.64, text: "하나만", size: 122 },
+      { at: 35.64, end: 36.26, text: "선택", size: 132 },
+      { at: 36.26, end: 38.44, text: "손이 먼저", size: 98 },
+      { at: 38.44, end: 39.96, text: "가", size: 132 },
+      { at: 39.96, end: 41.54, text: "눈이 먼저", size: 98 },
+      { at: 41.54, end: 42.10, text: "가", size: 132 },
+      { at: 42.10, end: 42.88, text: "오늘은", size: 108 },
+      { at: 42.88, end: 43.44, text: "달라", size: 122 },
+      { at: 44.06, end: 44.76, text: "다", size: 138 },
+      { at: 45.70, end: 46.66, text: "받아", size: 132 },
+      { at: 48.96, end: 50.28, text: "우신고에서", size: 116 },
+      { at: 50.28, end: 51.96, text: "스탬프제가?", size: 126 },
+      { at: 51.96, end: 53.94, text: "우신고에서", size: 116 },
+      { at: 53.94, end: 56.76, text: "스탬프제가?", size: 126 },
+      { at: 56.76, end: 57.44, text: "찍으면", size: 112 },
+      { at: 57.44, end: 61.50, text: "바로 보여", size: 106 },
+      { at: 64.28, end: 65.44, text: "달고나", size: 108 },
+      { at: 65.72, end: 66.74, text: "콩가루차", size: 106 },
+      { at: 66.74, end: 67.46, text: "팝콘", size: 116 },
+      { at: 67.72, end: 68.42, text: "아이스티", size: 116 },
+      { at: 68.62, end: 69.32, text: "찍고", size: 104 },
+      { at: 69.32, end: 70.20, text: "모으고", size: 104 },
+      { at: 70.20, end: 71.86, text: "받자", size: 118 },
+      { at: 72.36, end: 73.06, text: "찍고", size: 104 },
+      { at: 73.06, end: 73.96, text: "모으고", size: 104 },
+      { at: 73.96, end: 75.88, text: "받자", size: 118 },
+      { at: 76.14, end: 76.84, text: "찍고", size: 104 },
+      { at: 76.84, end: 77.72, text: "모으고", size: 104 },
+      { at: 77.72, end: 78.44, text: "받자", size: 118 },
+      { at: 78.44, end: 80.18, text: "우신고에서", size: 116 },
+      { at: 80.74, end: 81.82, text: "스탬프제가?", size: 126 },
+      { at: 82.74, end: 83.96, text: "우신고에서", size: 116 },
+      { at: 84.74, end: 85.74, text: "스탬프제가?", size: 126 },
+      { at: 86.74, end: 87.66, text: "찍으면", size: 112 },
+      { at: 87.66, end: 91.28, text: "바로 보여", size: 106 },
+      { at: 94.60, end: 95.30, text: "우신고에서", size: 116 },
+      { at: 95.30, end: 96.82, text: "스탬프제가?", size: 126 },
+      { at: 97.74, end: 98.88, text: "우신고에서", size: 116 },
+      { at: 98.94, end: 100.94, text: "스탬프제가?", size: 126 },
+      { at: 100.94, end: 102.70, text: "찍으면", size: 112 },
+      { at: 103.40, end: 106.46, text: "바로 보여", size: 106 },
+      { at: 109.00, end: DURATION, text: "아이스티", size: 116 }
+    ];
+
+    const performerVideos = {
+      sw: createOverlayVideo("../../SW.mp4"),
+      james: createOverlayVideo("../../James.mp4")
+    };
+
+    const rewardAssets = [
+      { name: "달고나", sub: "화학", src: "../../public/rewards/dalgona.png", color: "#f59e0b", img: createImage("../../public/rewards/dalgona.png") },
+      { name: "콩가루차", sub: "생명", src: "../../public/rewards/bean-tea.png", color: "#22c55e", img: createImage("../../public/rewards/bean-tea.png") },
+      { name: "팝콘", sub: "퀘이사", src: "../../public/rewards/popcorn.png", color: "#facc15", img: createImage("../../public/rewards/popcorn.png") },
+      { name: "아이스티", sub: "알파고", src: "../../public/rewards/iced-tea.png", color: "#60a5fa", img: createImage("../../public/rewards/iced-tea.png") }
+    ];
+
+    function clamp(v, min = 0, max = 1) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function ease(t) {
+      t = clamp(t);
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function snap(t) {
+      t = clamp(t);
+      return 1 - Math.pow(1 - t, 5);
+    }
+
+    function mix(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function beat(index) {
+      return BEAT_OFFSET + index * BEAT;
+    }
+
+    function createOverlayVideo(src) {
+      const video = document.createElement("video");
+      video.src = src;
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.style.display = "none";
+      document.body.appendChild(video);
+      return video;
+    }
+
+    function createImage(src) {
+      const img = new Image();
+      img.src = src;
+      return img;
+    }
+
+    async function startOverlayVideos() {
+      await Promise.all(Object.values(performerVideos).map(async (video) => {
+        try {
+          if (video.readyState < 2) video.load();
+          video.currentTime = 0;
+          await video.play();
+        } catch {
+          return undefined;
+        }
+      }));
+    }
+
+    function sceneAt(seconds) {
+      for (let i = scenes.length - 1; i >= 0; i -= 1) {
+        if (seconds >= scenes[i].at) return scenes[i];
+      }
+      return scenes[0];
+    }
+
+    function sceneProgress(scene, seconds) {
+      return clamp((seconds - scene.at) / (scene.end - scene.at));
+    }
+
+    function cueAt(seconds) {
+      return lyricCues.find((cue) => seconds >= cue.at && seconds < cue.end) || null;
+    }
+
+    function cueProgress(cue, seconds) {
+      return clamp((seconds - cue.at) / (cue.end - cue.at));
+    }
+
+    function roundedRect(x, y, w, h, r) {
+      const rr = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+    }
+
+    function fillRound(x, y, w, h, r, fill, stroke) {
+      roundedRect(x, y, w, h, r);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    function drawText(text, x, y, size, weight = 900, color = "#f8fafc", align = "left") {
+      ctx.fillStyle = color;
+      ctx.font = `${weight} ${size}px Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif`;
+      ctx.textAlign = align;
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(text, x, y);
+    }
+
+    function fontSpec(size, weight = 950) {
+      return `${weight} ${size}px Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif`;
+    }
+
+    function fitSize(text, baseSize, maxWidth) {
+      let size = baseSize;
+      ctx.font = fontSpec(size);
+      while (ctx.measureText(text).width > maxWidth && size > 42) {
+        size -= 3;
+        ctx.font = fontSpec(size);
+      }
+      return size;
+    }
+
+    function drawOutlinedText(text, x, y, size, color = "#ffffff", align = "center") {
+      ctx.font = fontSpec(size);
+      ctx.textAlign = align;
+      ctx.textBaseline = "alphabetic";
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.shadowColor = "rgba(0,0,0,0.36)";
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetY = 10;
+      ctx.strokeStyle = "rgba(2,6,23,0.78)";
+      ctx.lineWidth = Math.max(10, size * 0.105);
+      ctx.strokeText(text, x, y);
+      ctx.shadowColor = "transparent";
+      ctx.fillStyle = color;
+      ctx.fillText(text, x, y);
+    }
+
+    function drawMotionLines(x, y, width, alpha, phase) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = "rgba(255,255,255,0.72)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 7; i += 1) {
+        const offset = (i - 3) * 24;
+        const wobble = Math.sin(phase * 5 + i) * 10;
+        ctx.beginPath();
+        ctx.moveTo(x - width / 2 + offset + wobble, y + 42 + i * 5);
+        ctx.lineTo(x - width / 2 + offset + wobble + 44 + i * 9, y + 42 + i * 5);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawPhoneZoom(cx, cy, w, h, scale, rotation, content, t, alpha = 1) {
+      const sw = w * scale;
+      const sh = h * scale;
+      drawPhone(cx - sw / 2, cy - sh / 2, sw, sh, rotation, content, t, alpha);
+    }
+
+    function drawOpeningLogo(seconds, scene, p) {
+      ctx.save();
+      ctx.globalAlpha = snap(p * 4) * snap((1 - p) * 2);
+      drawText("StampWS", W / 2, H / 2 + 124, 42, 950, "rgba(219,234,254,0.9)", "center");
+      drawText("stampws.kr", W / 2, H / 2 + 178, 28, 900, "rgba(219,234,254,0.72)", "center");
+
+      const burst = snap((seconds - scene.at) / 1.2) * snap((scene.end - seconds) / 1.4);
+      ctx.globalAlpha = burst * 0.62;
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 42; i += 1) {
+        const a = (i / 42) * Math.PI * 2 + seconds * 0.2;
+        const inner = 190 + 16 * Math.sin(seconds + i);
+        const outer = inner + 70 + 90 * ease(p);
+        ctx.beginPath();
+        ctx.moveTo(W / 2 + Math.cos(a) * inner, H / 2 + Math.sin(a) * inner);
+        ctx.lineTo(W / 2 + Math.cos(a) * outer, H / 2 + Math.sin(a) * outer);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function splitGlyphs(text) {
+      return Array.from(text);
+    }
+
+    function lyricLayout(scene, cueIndex) {
+      const layoutSet = {
+        opening: [[W / 2, H / 2 - 42, 0], [W / 2, H / 2 + 30, 0]],
+        entry: [[500, 392, -0.03], [500, 540, 0.018], [500, 688, -0.012]],
+        scan: [[W / 2, 194, 0], [W / 2, 826, -0.012], [W / 2, 220, 0.012], [W / 2, 824, 0]],
+        stamp: [[482, 336, -0.018], [482, 560, 0.014], [W / 2, 812, 0]],
+        coupon: [[510, 308, -0.018], [510, 456, 0.016], [510, 604, -0.012], [510, 752, 0.01]],
+        couponMove: [[510, 308, -0.018], [510, 456, 0.016], [510, 604, -0.012], [510, 752, 0.01]],
+        redeem: [[W / 2, 202, 0], [W / 2, 826, -0.01], [W / 2, 214, 0.01]],
+        rewards: [[W / 2 - 330, 382, -0.02], [W / 2 + 330, 382, 0.02], [W / 2 - 330, 692, 0.018], [W / 2 + 330, 692, -0.018]],
+        end: [[W / 2, 806, 0], [W / 2, 888, 0]]
+      };
+      const layouts = layoutSet[scene.kind] || [[W / 2, H / 2, 0]];
+      return layouts[cueIndex % layouts.length];
+    }
+
+    function drawGlyphLyric(text, size, seconds, cp) {
+      const glyphs = splitGlyphs(text);
+      ctx.font = fontSpec(size);
+      const widths = glyphs.map((char) => char === " " ? size * 0.33 : ctx.measureText(char).width);
+      const totalWidth = widths.reduce((sum, width) => sum + width, 0);
+      const cursor = cp * Math.max(1, glyphs.length - 1);
+
+      ctx.save();
+      fillRound(-totalWidth / 2 - 40, -size * 0.72, totalWidth + 80, size * 1.12, Math.min(34, size * 0.28), "rgba(2,6,23,0.3)", "rgba(255,255,255,0.11)");
+      ctx.restore();
+
+      let x = -totalWidth / 2;
+      glyphs.forEach((char, index) => {
+        const width = widths[index];
+        if (char === " ") {
+          x += width;
+          return;
+        }
+        const flash = Math.max(0, 1 - Math.abs(index - cursor) / 0.8);
+        const beat = Math.max(0, Math.sin((seconds * 5.6 + index * 0.7) * Math.PI));
+        const scale = 1 + flash * 0.22 + beat * 0.035;
+        const rotate = (flash - 0.4) * 0.08 + Math.sin(seconds * 4.2 + index) * 0.012;
+        const lift = -flash * size * 0.08 + Math.sin(seconds * 6 + index) * 2;
+        const accent = index % 4 === 0 ? "#dbeafe" : "#f8fafc";
+        const flashColor = index % 3 === 0 ? "#60a5fa" : index % 3 === 1 ? "#fef08a" : "#38bdf8";
+        const color = flash > 0.35 ? flashColor : accent;
+
+        ctx.save();
+        ctx.translate(x + width / 2, lift);
+        ctx.rotate(rotate);
+        ctx.scale(scale, scale);
+        ctx.font = fontSpec(size);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineJoin = "round";
+        ctx.shadowColor = "rgba(0,0,0,0.42)";
+        ctx.shadowBlur = 24;
+        ctx.shadowOffsetY = 12;
+        ctx.strokeStyle = "rgba(2,6,23,0.92)";
+        ctx.lineWidth = Math.max(8, size * 0.09);
+        ctx.strokeText(char, 0, 0);
+        ctx.shadowColor = "transparent";
+        ctx.fillStyle = color;
+        ctx.fillText(char, 0, 0);
+        ctx.restore();
+        x += width;
+      });
+
+      return totalWidth;
+    }
+
+    function drawKineticLyric(seconds) {
+      const cue = cueAt(seconds);
+      if (!cue) return;
+      const cp = cueProgress(cue, seconds);
+      const alpha = snap(cp * 14) * snap((1 - cp) * 10);
+      if (alpha <= 0.01) return;
+
+      const scene = sceneAt(seconds);
+      const cueIndex = lyricCues.indexOf(cue);
+      const [centerX, centerYBase, rotate] = lyricLayout(scene, cueIndex);
+      const maxWidth = scene.kind === "rewards" ? 520 : scene.kind === "opening" ? 1180 : 820;
+      const base = scene.kind === "opening" ? cue.size * 0.98 : Math.min(cue.size * 0.9, 116);
+      const size = fitSize(cue.text, base, maxWidth);
+      const enter = snap(cp * 8);
+      const exit = snap((1 - cp) * 8);
+      const slideSide = cueIndex % 2 === 0 ? -1 : 1;
+      const punch = 1 + 0.05 * Math.sin(cp * Math.PI * 2);
+      const scale = mix(0.84, 1, enter) * mix(1, 0.92, 1 - exit) * punch;
+      const x = centerX + slideSide * mix(70, 0, enter);
+      const y = centerYBase + Math.sin(seconds * 4.8) * 5 + mix(30, 0, enter);
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(x, y);
+      ctx.rotate(rotate + Math.sin(seconds * 2.1) * 0.01);
+      ctx.scale(scale, scale);
+      const width = drawGlyphLyric(cue.text, size, seconds, cp);
+      ctx.restore();
+
+      drawMotionLines(x, y + size * 0.48, Math.min(760, width + 130), alpha * 0.22, seconds);
+    }
+
+    function drawBackground(t) {
+      const g = ctx.createLinearGradient(0, 0, W, H);
+      g.addColorStop(0, "#071020");
+      g.addColorStop(0.52, "#111827");
+      g.addColorStop(1, "#050914");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      const blue = ctx.createRadialGradient(W * (0.18 + 0.03 * Math.sin(t * 0.3)), H * 0.22, 0, W * 0.18, H * 0.22, 650);
+      blue.addColorStop(0, "rgba(37,99,235,0.58)");
+      blue.addColorStop(1, "rgba(37,99,235,0)");
+      ctx.fillStyle = blue;
+      ctx.fillRect(0, 0, W, H);
+
+      const cyan = ctx.createRadialGradient(W * 0.84, H * (0.18 + 0.04 * Math.cos(t * 0.24)), 0, W * 0.84, H * 0.18, 620);
+      cyan.addColorStop(0, "rgba(96,165,250,0.28)");
+      cyan.addColorStop(1, "rgba(96,165,250,0)");
+      ctx.fillStyle = cyan;
+      ctx.fillRect(0, 0, W, H);
+
+      const glass = ctx.createLinearGradient(-200 + (t * 32) % 2400, 0, 400 + (t * 32) % 2400, H);
+      glass.addColorStop(0, "rgba(255,255,255,0)");
+      glass.addColorStop(0.48, "rgba(255,255,255,0.1)");
+      glass.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = glass;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      ctx.globalAlpha = 0.08;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      for (let x = -60; x < W + 60; x += 72) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+        ctx.stroke();
+      }
+      for (let y = -60; y < H + 60; y += 72) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawQR(x, y, s, label, phase = 0) {
+      fillRound(x, y, s, s, 24, "#ffffff", "#e5e7eb");
+      ctx.save();
+      ctx.beginPath();
+      roundedRect(x + 18, y + 18, s - 36, s - 36, 16);
+      ctx.clip();
+      ctx.fillStyle = "#111827";
+      const cell = (s - 52) / 9;
+      for (let row = 0; row < 9; row += 1) {
+        for (let col = 0; col < 9; col += 1) {
+          const on = (row * 13 + col * 7 + Math.floor(phase * 3)) % 5 < 2 || (row < 2 && col < 2) || (row > 6 && col < 2) || (row < 2 && col > 6);
+          if (on) ctx.fillRect(x + 26 + col * cell, y + 26 + row * cell, cell * 0.78, cell * 0.78);
+        }
+      }
+      ctx.restore();
+      fillRound(x + s / 2 - 52, y + s / 2 - 20, 104, 40, 20, "#2563eb");
+      drawText(label, x + s / 2, y + s / 2 + 7, 15, 950, "#ffffff", "center");
+    }
+
+    function drawPhone(x, y, w, h, rotation, content, t, alpha = 1) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(x + w / 2, y + h / 2);
+      ctx.rotate(rotation);
+      ctx.translate(-w / 2, -h / 2);
+
+      ctx.shadowColor = "rgba(0,0,0,0.42)";
+      ctx.shadowBlur = 42;
+      ctx.shadowOffsetY = 22;
+      fillRound(0, 0, w, h, 48, "rgba(255,255,255,0.16)", "rgba(255,255,255,0.22)");
+      ctx.shadowColor = "transparent";
+      fillRound(14, 14, w - 28, h - 28, 36, "#f8fafc", "#ffffff");
+
+      ctx.fillStyle = "#111827";
+      roundedRect(w / 2 - 52, 26, 104, 9, 5);
+      ctx.fill();
+
+      drawText(content.title, 38, 74, 30, 950, "#111827");
+      fillRound(w - 118, 48, 74, 32, 16, "#eff6ff");
+      drawText(content.pill, w - 81, 70, 13, 950, "#2563eb", "center");
+
+      if (content.type === "qr") {
+        drawQR(54, 112, w - 108, content.qr, t);
+        drawText(content.main, 54, h - 140, 24, 950, "#111827");
+        drawText(content.sub, 54, h - 108, 15, 850, "#64748b");
+      }
+
+      if (content.type === "scanner") {
+        fillRound(46, 110, w - 92, w - 92, 28, "#0f172a");
+        ctx.strokeStyle = "rgba(96,165,250,0.82)";
+        ctx.lineWidth = 4;
+        roundedRect(68, 132, w - 136, w - 136, 22);
+        ctx.stroke();
+        const beamY = 148 + ((Math.sin(t * Math.PI * 2) + 1) / 2) * (w - 180);
+        ctx.fillStyle = "rgba(96,165,250,0.9)";
+        ctx.fillRect(76, beamY, w - 152, 5);
+        drawText("스캔 중", w / 2, 330, 26, 950, "#ffffff", "center");
+        drawText(content.main, 54, h - 140, 24, 950, "#111827");
+        drawText(content.sub, 54, h - 108, 15, 850, "#64748b");
+      }
+
+      if (content.type === "stamp") {
+        fillRound(52, 118, w - 104, 190, 28, "#eff6ff");
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(w / 2, 210, 54 + Math.sin(t * Math.PI) * 8, 0, Math.PI * 2);
+        ctx.stroke();
+        drawText("STAMP", w / 2, 220, 25, 950, "#2563eb", "center");
+        drawText(content.main, 54, h - 140, 24, 950, "#111827");
+        drawText(content.sub, 54, h - 108, 15, 850, "#64748b");
+      }
+
+      if (content.type === "coupon") {
+        fillRound(46, 110, w - 92, 360, 30, "#ffffff", "#e5e7eb");
+        drawText("쿠폰", 72, 158, 28, 950, "#111827");
+        drawQR(76, 184, w - 152, content.qr, t);
+        fillRound(72, 414, w - 144, 38, 19, "#2563eb");
+        drawText(content.main, w / 2, 440, 15, 950, "#ffffff", "center");
+        drawText(content.sub, 54, h - 108, 15, 850, "#64748b");
+      }
+
+      ctx.restore();
+    }
+
+    function drawParticles(cx, cy, p) {
+      ctx.save();
+      ctx.globalAlpha = ease(clamp(p * 2)) * ease(clamp((1 - p) * 2));
+      for (let i = 0; i < 28; i += 1) {
+        const a = (i / 28) * Math.PI * 2;
+        const d = 80 + 160 * ease(p);
+        ctx.fillStyle = i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? "#60a5fa" : "#2563eb";
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 4 + (i % 3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawImageContain(img, x, y, w, h) {
+      if (!img.complete || !img.naturalWidth) return false;
+      const scale = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+      const iw = img.naturalWidth * scale;
+      const ih = img.naturalHeight * scale;
+      ctx.drawImage(img, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+      return true;
+    }
+
+    function drawRewardCard(asset, x, y, w, h, alpha, pop = 1) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(x + w / 2, y + h / 2);
+      ctx.scale(pop, pop);
+      ctx.translate(-w / 2, -h / 2);
+      fillRound(0, 0, w, h, 30, "rgba(255,255,255,0.13)", "rgba(255,255,255,0.18)");
+      ctx.fillStyle = `${asset.color}33`;
+      roundedRect(18, 18, w - 36, h * 0.58, 24);
+      ctx.fill();
+      drawImageContain(asset.img, 28, 20, w - 56, h * 0.54);
+      drawText(asset.name, 26, h - 66, 28, 950, "#ffffff");
+      drawText(asset.sub, 26, h - 32, 17, 900, "rgba(219,234,254,0.74)");
+      ctx.restore();
+    }
+
+    function drawRewardMenu(seconds, p) {
+      const alpha = snap(p * 4) * snap((1 - p) * 3.2);
+      const x = 170;
+      const y = 250;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      fillRound(x, y, 560, 500, 34, "rgba(2,6,23,0.34)", "rgba(255,255,255,0.14)");
+      drawText("보상 선택", x + 34, y + 58, 30, 950, "#ffffff");
+      rewardAssets.forEach((asset, index) => {
+        const local = snap(clamp((p * 4.4 - index) / 0.8));
+        const cardX = x + 34 + (index % 2) * 248;
+        const cardY = y + 92 + Math.floor(index / 2) * 184;
+        drawRewardCard(asset, cardX, cardY, 220, 158, alpha * local, 0.94 + local * 0.06 + Math.sin(seconds * 4 + index) * 0.01);
+      });
+      ctx.restore();
+    }
+
+    function drawComicBurst(cx, cy, radius, alpha, phase, color = "rgba(250,204,21,0.92)") {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(cx, cy);
+      ctx.rotate(phase * 0.5);
+      ctx.beginPath();
+      for (let i = 0; i < 24; i += 1) {
+        const r = i % 2 === 0 ? radius : radius * 0.62;
+        const a = (i / 24) * Math.PI * 2;
+        const x = Math.cos(a) * r;
+        const y = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.78)";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawHalftone(cx, cy, alpha) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "rgba(255,255,255,0.42)";
+      for (let row = 0; row < 9; row += 1) {
+        for (let col = 0; col < 13; col += 1) {
+          const r = 2 + ((row + col) % 4);
+          ctx.beginPath();
+          ctx.arc(cx + col * 22, cy + row * 22, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    function windowAlpha(seconds, start, end) {
+      return snap((seconds - start) / 0.7) * snap((end - seconds) / 0.8);
+    }
+
+    function drawKeyedVideoFrame(video, w, h) {
+      const outW = Math.max(1, Math.round(w));
+      const outH = Math.max(1, Math.round(h));
+      if (keyedVideoCanvas.width !== outW || keyedVideoCanvas.height !== outH) {
+        keyedVideoCanvas.width = outW;
+        keyedVideoCanvas.height = outH;
+      }
+      keyedVideoCtx.clearRect(0, 0, outW, outH);
+      keyedVideoCtx.drawImage(video, 0, 0, outW, outH);
+      let frame;
+      try {
+        frame = keyedVideoCtx.getImageData(0, 0, outW, outH);
+      } catch {
+        if (!taintWarningShown) {
+          taintWarningShown = true;
+          statusEl.textContent = "http://127.0.0.1:4174 로 열기";
+        }
+        return video;
+      }
+      const data = frame.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const saturation = max - min;
+        if (max < 34 && saturation < 20) {
+          data[i + 3] = 0;
+        } else if (max < 72 && saturation < 26) {
+          data[i + 3] = Math.round(data[i + 3] * clamp((max - 34) / 38));
+        }
+      }
+      keyedVideoCtx.putImageData(frame, 0, 0);
+      return keyedVideoCanvas;
+    }
+
+    function drawVideoCutout(video, cx, cy, w, h, alpha, rotation, scale, mirror = false) {
+      if (!video || video.readyState < 2) return;
+      const keyedFrame = drawKeyedVideoFrame(video, w, h);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(cx, cy);
+      ctx.rotate(rotation);
+      ctx.scale((mirror ? -1 : 1) * scale, scale);
+      ctx.shadowColor = "rgba(0,0,0,0.34)";
+      ctx.shadowBlur = 28;
+      ctx.shadowOffsetY = 18;
+      ctx.drawImage(keyedFrame, -w / 2, -h / 2, w, h);
+      ctx.restore();
+    }
+
+    function drawPerformers(seconds) {
+      const windows = [
+        { key: "sw", start: beat(8), end: beat(20), x: 330, y: 760, w: 360, h: 520, rot: -0.08, mirror: false },
+        { key: "james", start: beat(9), end: beat(20), x: 1580, y: 760, w: 360, h: 520, rot: 0.08, mirror: true },
+        { key: "sw", start: beat(72), end: beat(112), x: 310, y: 790, w: 330, h: 500, rot: -0.1, mirror: false },
+        { key: "james", start: beat(74), end: beat(112), x: 1600, y: 790, w: 330, h: 500, rot: 0.1, mirror: true },
+        { key: "sw", start: beat(164), end: beat(204), x: 300, y: 790, w: 330, h: 500, rot: -0.08, mirror: false },
+        { key: "james", start: beat(166), end: beat(204), x: 1610, y: 790, w: 330, h: 500, rot: 0.08, mirror: true },
+        { key: "sw", start: beat(224), end: DURATION, x: 360, y: 790, w: 360, h: 520, rot: -0.06, mirror: false },
+        { key: "james", start: beat(225), end: DURATION, x: 1560, y: 790, w: 360, h: 520, rot: 0.06, mirror: true }
+      ];
+      windows.forEach((item, index) => {
+        const alpha = windowAlpha(seconds, item.start, item.end);
+        if (alpha <= 0.01) return;
+        const local = seconds - item.start;
+        const bounce = Math.sin(local * 8 + index) * 16;
+        const scale = 0.96 + alpha * 0.12 + Math.sin(local * 6) * 0.025;
+        drawVideoCutout(performerVideos[item.key], item.x, item.y + bounce, item.w, item.h, alpha, item.rot + Math.sin(local * 5) * 0.025, scale, item.mirror);
+      });
+    }
+
+    function drawScene(seconds) {
+      const t = seconds;
+      const scene = sceneAt(seconds);
+      const p = sceneProgress(scene, seconds);
+
+      drawBackground(t);
+
+      if (scene.kind === "opening") {
+        drawOpeningLogo(seconds, scene, p);
+      }
+
+      if (scene.kind === "entry") {
+        const a = snap(p * 3.6);
+        drawPhoneZoom(1210, 540, 430, 760, 0.7 + 0.36 * a + 0.03 * Math.sin(seconds * 2.2), -0.07 + 0.025 * Math.sin(seconds * 0.9), {
+          type: "qr", title: "입장", pill: "학생", qr: "10214", main: "학번으로 입장", sub: "비밀번호 없음"
+        }, t, a);
+      }
+
+      if (scene.kind === "scan") {
+        const a = snap(p * 3.8);
+        const pulse = 0.92 + 0.12 * a + 0.045 * Math.sin(seconds * 3.1);
+        drawPhoneZoom(610 - 120 * (1 - a), 532, 360, 640, pulse, -0.18, {
+          type: "qr", title: "학생", pill: "QR", qr: "내 QR", main: "보여주기", sub: "부스 앞에서"
+        }, t, a);
+        drawPhoneZoom(1190 + 120 * (1 - a), 526, 360, 640, 0.92 + 0.13 * a + 0.045 * Math.cos(seconds * 3.1), 0.16, {
+          type: "scanner", title: "부스", pill: "SCAN", main: "스캔 완료", sub: "서버 기록"
+        }, p, a);
+        drawComicBurst(960, 522, 78 + Math.sin(seconds * 8) * 8, a * 0.38, seconds, "rgba(96,165,250,0.7)");
+      }
+
+      if (scene.kind === "stamp") {
+        const a = snap(p * 3.6);
+        drawPhoneZoom(1240, 530, 390, 690, 0.76 + 0.34 * snap(Math.sin(p * Math.PI)), -0.04 + 0.03 * Math.sin(seconds * 1.6), {
+          type: "stamp", title: "스탬프", pill: "OK", main: "지급 완료", sub: "기록에 저장"
+        }, p, a);
+        drawComicBurst(1160, 300, 86 + Math.sin(seconds * 9) * 10, a * 0.44, seconds, "rgba(250,204,21,0.78)");
+        drawHalftone(260, 690, a * 0.16);
+        drawParticles(960, 520, p);
+      }
+
+      if (scene.kind === "coupon" || scene.kind === "couponMove") {
+        const a = snap(p * 3.8);
+        drawPhoneZoom(1225, 530, 400, 710, 0.7 + 0.34 * a + 0.03 * Math.sin(seconds * 2.7), 0.04 + 0.02 * Math.sin(seconds), {
+          type: "coupon", title: "쿠폰", pill: "5 / 5", qr: "쿠폰", main: "보상 선택", sub: "하나만 받을 수 있음"
+        }, t, a);
+        drawRewardMenu(seconds, p);
+      }
+
+      if (scene.kind === "redeem") {
+        const a = snap(p * 3.8);
+        drawPhoneZoom(620 - 100 * (1 - a), 532, 360, 640, 0.9 + 0.15 * a + 0.025 * Math.sin(seconds * 2.2), -0.16, {
+          type: "coupon", title: "쿠폰", pill: "READY", qr: "쿠폰 QR", main: "사용하기", sub: "보상 부스에서"
+        }, t, a);
+        drawPhoneZoom(1190 + 100 * (1 - a), 526, 360, 640, 0.9 + 0.15 * a + 0.025 * Math.cos(seconds * 2.2), 0.16, {
+          type: "scanner", title: "보상", pill: "USE", main: "수령 완료", sub: "사용 기록 저장"
+        }, p, a);
+      }
+
+      if (scene.kind === "rewards") {
+        rewardAssets.forEach((asset, index) => {
+          const local = clamp((seconds - beat(204 + index * 5)) / beat(2.5));
+          const a = snap(local) * snap((1 - local) * 2.9);
+          const x = [270, 1010, 430, 1160][index];
+          const y = [245, 245, 570, 570][index];
+          drawRewardCard(asset, x, y, 430, 270, a, 0.86 + a * 0.16 + Math.sin(seconds * 5 + index) * 0.015);
+          if (a > 0.05) drawComicBurst(x + 382, y + 46, 40, a * 0.18, seconds + index, `${asset.color}aa`);
+        });
+      }
+
+      if (scene.kind === "end") {
+        const a = snap(p * 3.4);
+        drawPhoneZoom(960, 535 - 30 * a, 430, 680, 0.66 + 0.44 * a, 0, {
+          type: "qr", title: "StampWS", pill: "OPEN", qr: "WS", main: "stampws.kr", sub: "현장에서 바로 사용"
+        }, t, a);
+        ctx.save();
+        ctx.globalAlpha = a;
+        drawText("stampws.kr", W / 2, 955, 46, 950, "#ffffff", "center");
+        ctx.restore();
+      }
+
+      drawPerformers(seconds);
+      drawKineticLyric(seconds);
+    }
+
+    function loop(now) {
+      const seconds = audio.paused ? ((now - startTime) / 1000) % DURATION : Math.min(audio.currentTime, DURATION);
+      drawScene(seconds);
+      if (!recording && playing && audio.currentTime >= DURATION - 0.05) {
+        audio.currentTime = 0;
+        audio.play().catch(() => undefined);
+      }
+      if (playing || recording) loopId = requestAnimationFrame(loop);
+    }
+
+    function setupAudioGraph() {
+      if (audioDestination) return audioDestination.stream;
+      audioContext = audioContext || new AudioContext();
+      audioSource = audioSource || audioContext.createMediaElementSource(audio);
+      audioDestination = audioContext.createMediaStreamDestination();
+      audioSource.connect(audioContext.destination);
+      audioSource.connect(audioDestination);
+      return audioDestination.stream;
+    }
+
+    async function play() {
+      playing = true;
+      tap.style.display = "none";
+      document.querySelector(".controls")?.classList.add("hidden");
+      statusEl.textContent = "재생 중";
+      startTime = performance.now();
+      try {
+        if (audioContext?.state === "suspended") await audioContext.resume();
+        audio.currentTime = 0;
+        audio.loop = true;
+        await startOverlayVideos();
+        await audio.play();
+      } catch {
+        statusEl.textContent = "오디오 권한 필요";
+      }
+      cancelAnimationFrame(loopId);
+      loopId = requestAnimationFrame(loop);
+    }
+
+    function supportedMime() {
+      const types = [
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4;codecs=avc1.640028,mp4a.40.2",
+        "video/mp4;codecs=h264,aac",
+        "video/mp4;codecs=h264",
+        "video/mp4;codecs=avc1.42E01E",
+        "video/mp4",
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/webm"
+      ];
+      return types.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+    }
+
+    async function exportVideo() {
+      if (recording) return;
+      recording = true;
+      playing = false;
+      tap.style.display = "none";
+      document.querySelector(".controls")?.classList.remove("hidden");
+      exportButton.disabled = true;
+      statusEl.textContent = "녹화 준비";
+      const mimeType = supportedMime();
+      const videoStream = canvas.captureStream(60);
+      let audioStream = null;
+      try {
+        audioStream = setupAudioGraph();
+        if (audioContext.state === "suspended") await audioContext.resume();
+      } catch {
+        audioStream = null;
+      }
+      const stream = new MediaStream([
+        ...videoStream.getVideoTracks(),
+        ...(audioStream ? audioStream.getAudioTracks() : [])
+      ]);
+      const recorder = new MediaRecorder(stream, {
+        mimeType: mimeType || undefined,
+        videoBitsPerSecond: 14_000_000
+      });
+      const chunks = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || mimeType || "video/webm";
+        const blob = new Blob(chunks, { type });
+        const isMp4 = type.includes("mp4");
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `stampws-phone-scenes.${isMp4 ? "mp4" : "webm"}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        statusEl.textContent = isMp4 ? "MP4+오디오 저장 완료" : "MP4 미지원, WEBM+오디오 저장";
+        exportButton.disabled = false;
+        recording = false;
+        play();
+      };
+
+      startTime = performance.now();
+      audio.loop = false;
+      audio.currentTime = 0;
+      await startOverlayVideos();
+      await audio.play();
+      cancelAnimationFrame(loopId);
+      loopId = requestAnimationFrame(loop);
+      recorder.start(1000);
+
+      const startedAt = performance.now();
+      const timer = setInterval(() => {
+        const elapsed = (performance.now() - startedAt) / 1000;
+        statusEl.textContent = `녹화 ${Math.min(elapsed, DURATION).toFixed(1)}s`;
+        if (elapsed >= DURATION) {
+          clearInterval(timer);
+          recorder.stop();
+          stream.getTracks().forEach((track) => track.stop());
+          audio.pause();
+        }
+      }, 120);
+    }
+
+    audio.addEventListener("loadedmetadata", () => {
+      statusEl.textContent = `오디오 ${audio.duration.toFixed(1)}s`;
+    });
+    audio.addEventListener("ended", () => {
+      if (playing && !recording) {
+        audio.currentTime = 0;
+        audio.play().catch(() => undefined);
+      }
+    });
+
+    playButton.addEventListener("click", () => play());
+    exportButton.addEventListener("click", exportVideo);
+    document.addEventListener("click", (event) => {
+      if (event.target.closest(".controls") || event.target.closest("a")) return;
+      if (!playing && !recording) play();
+    });
+
+    drawScene(0);
+  </script>
+</body>
+</html>

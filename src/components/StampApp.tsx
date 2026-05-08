@@ -108,6 +108,19 @@ type TeaFirmwarePayload = {
   source: "storage" | "default";
 };
 
+type ArduinoButtonView = {
+  id: string;
+  label: string;
+  scriptText: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type TeaButtonsPayload = {
+  buttons: ArduinoButtonView[];
+  updatedAt?: string;
+};
+
 type ClubNoticeView = {
   id: string;
   clubId: string;
@@ -417,6 +430,45 @@ function teaSourceLabel(reservation: Pick<TeaReservationView, "source" | "priori
   return "온라인";
 }
 
+function newArduinoButtonDraft(): ArduinoButtonView {
+  const now = new Date().toISOString();
+  return {
+    id: `draft_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    label: "새 버튼",
+    scriptText: DEFAULT_ARDUINO_BUTTON_SCRIPT,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function parseArduinoButtonScript(scriptText: string) {
+  const steps: Array<{ type: "send"; command: string } | { type: "delay"; ms: number }> = [];
+  const lines = scriptText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+
+  for (const rawLine of lines) {
+    let line = rawLine.replace(/\/\/.*$/, "").trim();
+    if (!line || line === "{" || line === "}") continue;
+    if (/^(void|if|else|for|while|switch)\b/.test(line)) continue;
+    line = line.replace(/;$/, "").trim();
+
+    const delayMatch = /^delay\s*\(\s*(\d{1,6})\s*\)$/i.exec(line);
+    if (delayMatch) {
+      steps.push({ type: "delay", ms: Math.min(Number(delayMatch[1]), 60_000) });
+      continue;
+    }
+
+    const sendMatch =
+      /^(?:Serial\.println|Serial\.print|send|writeSerial)\s*\(\s*"([^"\n]{1,80})"\s*\)$/i.exec(line) ||
+      /^(?:Serial\.println|Serial\.print|send|writeSerial)\s*\(\s*'([^'\n]{1,80})'\s*\)$/i.exec(line);
+    const candidate = (sendMatch?.[1] || line).normalize("NFKC").trim().toUpperCase();
+    if (/^[A-Z][A-Z0-9_:-]*(,[A-Z0-9_.:-]+){0,6}$/.test(candidate)) {
+      steps.push({ type: "send", command: candidate.slice(0, 80) });
+    }
+  }
+
+  return steps;
+}
+
 function roleLabel(role?: Role) {
   if (role === "participant") return "참가자";
   if (role === "boothAdmin") return "부스";
@@ -427,6 +479,10 @@ function roleLabel(role?: Role) {
 
 const PRINTER_WIDTH = 576;
 const TEA_DEFAULT_COMMAND = "T,15,20";
+const DEFAULT_ARDUINO_BUTTON_SCRIPT = `void runButton() {
+  Serial.println("${TEA_DEFAULT_COMMAND}");
+}
+`;
 
 let printerConnected = false;
 const writeCharRef: { current: any } = { current: null };
@@ -2481,6 +2537,8 @@ function TeaMakerPanel() {
   const [firmwareText, setFirmwareText] = useState("");
   const [firmwareUpdatedAt, setFirmwareUpdatedAt] = useState("");
   const [firmwareSource, setFirmwareSource] = useState<"storage" | "default">("default");
+  const [arduinoButtons, setArduinoButtons] = useState<ArduinoButtonView[]>([]);
+  const [arduinoButtonsUpdatedAt, setArduinoButtonsUpdatedAt] = useState("");
   const [manualName, setManualName] = useState("현장주문");
   const [logs, setLogs] = useState<string[]>(["연결 대기"]);
   const [message, setMessage] = useState("");
@@ -2503,14 +2561,21 @@ function TeaMakerPanel() {
     setFirmwareSource(data.source);
   }, []);
 
+  const loadArduinoButtons = useCallback(async () => {
+    const data = await apiJson<TeaButtonsPayload>("/api/tea/buttons", { method: "GET" });
+    setArduinoButtons(data.buttons);
+    setArduinoButtonsUpdatedAt(data.updatedAt || "");
+  }, []);
+
   useEffect(() => {
     load().catch((err) => setMessage(err instanceof Error ? err.message : "예약 로드 실패"));
     loadFirmware().catch(() => undefined);
+    loadArduinoButtons().catch(() => undefined);
     const timer = window.setInterval(() => {
       load().catch(() => undefined);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [load, loadFirmware]);
+  }, [load, loadFirmware, loadArduinoButtons]);
 
   function appendSerialLog(line: string, direction = "ARD") {
     const stamp = new Intl.DateTimeFormat("ko-KR", {
@@ -2701,6 +2766,61 @@ function TeaMakerPanel() {
     setMessage(`${file.name} 불러옴`);
   }
 
+  function updateArduinoButton(id: string, patch: Partial<Pick<ArduinoButtonView, "label" | "scriptText">>) {
+    setArduinoButtons((current) => current.map((button) => (
+      button.id === id ? { ...button, ...patch, updatedAt: new Date().toISOString() } : button
+    )));
+  }
+
+  function addArduinoButton() {
+    setArduinoButtons((current) => [...current, newArduinoButtonDraft()]);
+  }
+
+  function deleteArduinoButton(id: string) {
+    setArduinoButtons((current) => current.filter((button) => button.id !== id));
+  }
+
+  async function saveArduinoButtons() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const data = await apiJson<TeaButtonsPayload>("/api/tea/buttons", {
+        method: "PATCH",
+        body: JSON.stringify({ buttons: arduinoButtons })
+      });
+      setArduinoButtons(data.buttons);
+      setArduinoButtonsUpdatedAt(data.updatedAt || "");
+      setMessage(`버튼 저장 ${data.buttons.length}개`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "버튼 저장 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runArduinoButton(button: ArduinoButtonView) {
+    setBusy(true);
+    setMessage("");
+    try {
+      const steps = parseArduinoButtonScript(button.scriptText);
+      const sendCount = steps.filter((step) => step.type === "send").length;
+      if (sendCount < 1) throw new Error("전송할 Serial.println 줄이 없습니다.");
+      for (const step of steps) {
+        if (step.type === "delay") {
+          appendSerialLog(`delay ${step.ms}ms`, "WEB");
+          await new Promise((resolve) => window.setTimeout(resolve, step.ms));
+        } else {
+          await writeSerial(step.command);
+        }
+      }
+      setMessage(`${button.label} 실행`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "버튼 실행 실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function createManualReservation() {
     setBusy(true);
     setMessage("");
@@ -2775,6 +2895,45 @@ function TeaMakerPanel() {
           <a className="secondaryLink" href="/arduino/alphago_tea_maker_full.ino" target="_blank" rel="noreferrer">펌웨어</a>
         </div>
         {message && <p className={message.includes("실패") || message.includes("필요") ? "errorText" : "statusText"}>{message}</p>}
+        <div className="arduinoButtonsPanel">
+          <div className="firmwareHeader">
+            <div>
+              <strong>아두이노 버튼</strong>
+              <span>{arduinoButtons.length}개 · {formatTime(arduinoButtonsUpdatedAt)}</span>
+            </div>
+            <div className="firmwareActions">
+              <button className="secondaryButton" onClick={addArduinoButton} type="button">추가</button>
+              <button className="primaryButton" disabled={busy} onClick={saveArduinoButtons} type="button">저장</button>
+            </div>
+          </div>
+          <div className="arduinoButtonList">
+            {arduinoButtons.map((button) => {
+              const steps = parseArduinoButtonScript(button.scriptText);
+              const sendCount = steps.filter((step) => step.type === "send").length;
+              return (
+                <div className="arduinoButtonCard" key={button.id}>
+                  <div className="arduinoButtonTop">
+                    <label>
+                      버튼명
+                      <input value={button.label} onChange={(event) => updateArduinoButton(button.id, { label: event.target.value })} maxLength={18} />
+                    </label>
+                    <span className="pill">{sendCount}줄</span>
+                    <button className="primaryButton" disabled={busy || !serialConnected || sendCount < 1} onClick={() => runArduinoButton(button)} type="button">실행</button>
+                    <button className="dangerButton" disabled={busy} onClick={() => deleteArduinoButton(button.id)} type="button">삭제</button>
+                  </div>
+                  <textarea
+                    className="arduinoScriptEditor"
+                    spellCheck={false}
+                    value={button.scriptText}
+                    onChange={(event) => updateArduinoButton(button.id, { scriptText: event.target.value })}
+                  />
+                  <p className="hintText">Serial.println("T,15,20"); / delay(1000); 형식.</p>
+                </div>
+              );
+            })}
+            {arduinoButtons.length === 0 && <p className="emptyText">버튼 없음</p>}
+          </div>
+        </div>
         <div className="serialLogBox">{logs.join("\n")}</div>
         <div className="firmwarePanel">
           <div className="firmwareHeader">
@@ -2825,6 +2984,16 @@ function TeaMakerPanel() {
 }
 
 function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<void> }) {
+  function openShowcaseWindow() {
+    const opened = window.open("/showcase", "stampwsShowcase", "width=1280,height=720");
+    if (opened) {
+      opened.opener = null;
+      opened.focus();
+      return;
+    }
+    window.location.href = "/showcase";
+  }
+
   return (
     <div className="gridTwo adminGrid">
       <section className="panel widePanel">
@@ -2833,6 +3002,7 @@ function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<voi
             <h2>총괄</h2>
             <p>서버 기록 기준.</p>
           </div>
+          <button className="secondaryButton" onClick={openShowcaseWindow} type="button">소개창</button>
         </div>
         <div className="metricGrid">
           <div><strong>{me.adminSummary?.participantCount || 0}</strong><span>참가자</span></div>

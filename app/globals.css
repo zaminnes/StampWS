@@ -1738,6 +1738,46 @@ th {
   padding: 12px;
 }
 
+.arduinoButtonsPanel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.arduinoButtonList {
+  display: grid;
+  gap: 10px;
+}
+
+.arduinoButtonCard {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.arduinoButtonTop {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+
+.arduinoScriptEditor {
+  background: #0f172a;
+  border-color: #1e293b;
+  color: #e5e7eb;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  min-height: 126px;
+  white-space: pre;
+}
+
 .firmwareHeader,
 .firmwareActions {
   align-items: center;
@@ -2268,6 +2308,7 @@ th {
   }
 
   .accountTools,
+  .arduinoButtonTop,
   .boothNameRow,
   .securityGrid,
   .teaCustomerHero,
