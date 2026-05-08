@@ -1006,7 +1006,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
         <div className="segmented authModes">
           <button className={mode === "participant" ? "active" : ""} onClick={() => setMode("participant")} type="button">참가자</button>
           <button className={mode === "adminLogin" ? "active" : ""} onClick={() => setMode("adminLogin")} type="button">관리자</button>
-          <button className={mode === "adminJoin" ? "active" : ""} onClick={() => setMode("adminJoin")} type="button">가입</button>
+          <button className={mode === "adminJoin" ? "active" : ""} onClick={() => setMode("adminJoin")} type="button">관리자 가입</button>
         </div>
         <label>
           {mode === "participant" ? "학번" : "아이디"}
@@ -1041,7 +1041,7 @@ function AuthPanel({ onDone }: { onDone: () => Promise<void> }) {
         )}
         {error && <p className="errorText">{error}</p>}
         <button className="primaryButton" disabled={busy} onClick={submit} type="button">
-          {busy ? "처리중" : mode === "participant" ? "입장" : mode === "adminLogin" ? "로그인" : "가입"}
+          {busy ? "처리중" : mode === "participant" ? "입장" : mode === "adminLogin" ? "로그인" : "관리자 가입"}
         </button>
       </section>
       <section className="quickPanel">
