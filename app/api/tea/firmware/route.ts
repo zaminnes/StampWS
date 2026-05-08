@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
     if (request.nextUrl.searchParams.get("raw") === "1") {
       return new NextResponse(firmwareText, {
         headers: {
+          "Cache-Control": "no-store, max-age=0",
           "Content-Type": "text/x-arduino; charset=utf-8",
           "Content-Disposition": "attachment; filename=\"alphago_tea_maker_full.ino\"",
           "X-Content-Type-Options": "nosniff"
