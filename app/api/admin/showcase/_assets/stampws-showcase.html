@@ -256,7 +256,7 @@
       return lyricStart + seconds * ((DURATION - lyricStart) / ORIGINAL_DURATION);
     }
 
-    function buildScenes() {
+    function fallbackScenes() {
       return [
         { at: 0, end: lyricMappedTime(4.00), kind: "opening", sub: "우신고에서 / 스탬프제가?" },
         { at: lyricMappedTime(4.00), end: lyricMappedTime(8.00), kind: "entry", sub: "학번 / 입장 / 내 QR" },
@@ -270,6 +270,43 @@
         { at: lyricMappedTime(79.00), end: lyricMappedTime(107.00), kind: "stamp", sub: "우신고에서 스탬프제가?" },
         { at: lyricMappedTime(107.00), end: DURATION, kind: "end", sub: "찍고, 모으고, 받자" }
       ];
+    }
+
+    const versionScenes = {
+      classic: [
+        { at: 0.00, end: 6.24, kind: "opening", sub: "우신고에서 / 스탬프제가?" },
+        { at: 6.24, end: 15.64, kind: "entry", sub: "학번 / 입장 / 내 QR" },
+        { at: 15.64, end: 26.64, kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
+        { at: 26.64, end: 39.86, kind: "stamp", sub: "찍으면 바로 보여" },
+        { at: 39.86, end: 46.40, kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
+        { at: 46.40, end: 56.36, kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
+        { at: 56.36, end: 69.66, kind: "redeem", sub: "우신고에서 스탬프제가?" },
+        { at: 69.66, end: 76.72, kind: "rewards", sub: "달고나 / 콩가루차 / 팝콘 / 아이스티" },
+        { at: 76.72, end: 86.60, kind: "end", sub: "찍고, 모으고, 받자" },
+        { at: 86.60, end: 107.12, kind: "stamp", sub: "클래식 엔딩" }
+      ],
+      boss: [
+        { at: 0.00, end: 10.20, kind: "opening", sub: "우신고에서 / 스탬프제가?" },
+        { at: 10.20, end: 18.10, kind: "entry", sub: "학번 / 입장 / 내 QR" },
+        { at: 18.10, end: 39.84, kind: "scan", sub: "한 번 찍어 / 딱 맞춰" },
+        { at: 39.84, end: 52.28, kind: "stamp", sub: "찍으면 바로 보여" },
+        { at: 52.28, end: 58.66, kind: "coupon", sub: "다섯 개 / 쿠폰 / 하나만 / 선택" },
+        { at: 58.66, end: 69.02, kind: "couponMove", sub: "손이 먼저 가 / 다 받아" },
+        { at: 69.02, end: 84.08, kind: "redeem", sub: "우신고에서 스탬프제가?" },
+        { at: 84.08, end: 91.18, kind: "rewards", sub: "달고나 / 콩가루차 / 팝콘 / 아이스티" },
+        { at: 91.18, end: 100.40, kind: "end", sub: "찍고, 모으고, 받자" },
+        { at: 100.40, end: 112.68, kind: "stamp", sub: "파이널 엔딩" }
+      ]
+    };
+
+    function buildScenes() {
+      const custom = versionScenes[currentVersionKey];
+      if (!custom) return fallbackScenes();
+      return custom.map((scene) => ({
+        ...scene,
+        at: Math.max(0, Math.min(scene.at, DURATION)),
+        end: Math.max(0, Math.min(scene.end, DURATION))
+      }));
     }
 
     let scenes = buildScenes();
@@ -340,65 +377,124 @@
       { at: 109.00, end: ORIGINAL_DURATION, text: "아이스티", size: 116 }
     ];
 
+    const classicLyricCues = [
+      { at: 2.88, end: 4.28, text: "우신고에서", size: 126 },
+      { at: 4.28, end: 5.68, text: "스탬프제가?", size: 146 },
+      { at: 12.56, end: 13.30, text: "학번", size: 132 },
+      { at: 13.30, end: 14.00, text: "입장", size: 132 },
+      { at: 14.00, end: 15.64, text: "내 QR", size: 130 },
+      { at: 15.64, end: 18.64, text: "한 번", size: 116 },
+      { at: 18.64, end: 19.46, text: "찍어", size: 128 },
+      { at: 19.46, end: 20.60, text: "눈앞이", size: 108 },
+      { at: 20.60, end: 21.76, text: "바뀌어", size: 110 },
+      { at: 21.76, end: 22.82, text: "사라지기", size: 96 },
+      { at: 22.82, end: 23.38, text: "전에", size: 116 },
+      { at: 23.38, end: 25.90, text: "딱", size: 150 },
+      { at: 25.90, end: 26.64, text: "맞춰", size: 132 },
+      { at: 26.64, end: 28.62, text: "우신고에서", size: 118 },
+      { at: 28.62, end: 30.66, text: "스탬프제가?", size: 132 },
+      { at: 31.34, end: 33.34, text: "우신고에서", size: 118 },
+      { at: 33.34, end: 35.90, text: "스탬프제가?", size: 132 },
+      { at: 35.90, end: 37.30, text: "찍으면", size: 116 },
+      { at: 37.30, end: 39.86, text: "바로 보여", size: 112 },
+      { at: 42.92, end: 43.90, text: "다섯 개", size: 124 },
+      { at: 43.90, end: 44.58, text: "쿠폰", size: 136 },
+      { at: 44.58, end: 45.78, text: "하나만", size: 126 },
+      { at: 45.78, end: 46.40, text: "선택", size: 136 },
+      { at: 46.40, end: 48.74, text: "손이 먼저", size: 104 },
+      { at: 48.74, end: 50.18, text: "가", size: 138 },
+      { at: 50.64, end: 51.72, text: "눈이 먼저", size: 104 },
+      { at: 51.72, end: 52.26, text: "가", size: 138 },
+      { at: 52.26, end: 53.00, text: "오늘은", size: 112 },
+      { at: 53.00, end: 53.54, text: "달라", size: 126 },
+      { at: 53.54, end: 55.12, text: "다", size: 146 },
+      { at: 55.12, end: 56.36, text: "받아", size: 136 },
+      { at: 56.36, end: 58.38, text: "우신고에서", size: 120 },
+      { at: 58.38, end: 60.08, text: "스탬프제가?", size: 134 },
+      { at: 60.08, end: 62.14, text: "우신고에서", size: 120 },
+      { at: 62.14, end: 64.32, text: "스탬프제가?", size: 134 },
+      { at: 64.32, end: 66.00, text: "찍으면", size: 118 },
+      { at: 66.00, end: 69.66, text: "바로 보여", size: 114 },
+      { at: 72.14, end: 73.54, text: "달고나", size: 112 },
+      { at: 73.54, end: 74.78, text: "콩가루차", size: 110 },
+      { at: 74.78, end: 75.54, text: "팝콘", size: 120 },
+      { at: 75.54, end: 76.72, text: "아이스티", size: 122 },
+      { at: 76.72, end: 77.38, text: "찍고", size: 108 },
+      { at: 77.38, end: 78.32, text: "모으고", size: 108 },
+      { at: 78.32, end: 80.02, text: "받자", size: 124 },
+      { at: 80.02, end: 81.12, text: "찍고", size: 108 },
+      { at: 81.12, end: 82.02, text: "모으고", size: 108 },
+      { at: 82.02, end: 83.76, text: "받자", size: 126 }
+    ];
+
     const bossLyricCues = [
-      { at: 4.02, end: 6.10, text: "우신고에서", size: 126 },
-      { at: 6.10, end: 8.60, text: "스탬프제가?", size: 146 },
-      { at: 10.02, end: 11.50, text: "학번", size: 132 },
-      { at: 12.18, end: 13.28, text: "입장", size: 132 },
-      { at: 15.05, end: 16.78, text: "내 QR", size: 130 },
-      { at: 18.36, end: 20.16, text: "한 번", size: 116 },
-      { at: 20.16, end: 21.55, text: "찍어", size: 128 },
-      { at: 21.78, end: 23.05, text: "눈앞이", size: 108 },
-      { at: 23.05, end: 24.62, text: "바뀌어", size: 110 },
-      { at: 27.55, end: 29.00, text: "사라지기", size: 96 },
-      { at: 29.00, end: 30.28, text: "전에", size: 116 },
-      { at: 31.28, end: 34.76, text: "딱", size: 150 },
-      { at: 35.15, end: 37.80, text: "맞춰", size: 132 },
-      { at: 40.70, end: 43.80, text: "우신고에서", size: 118 },
-      { at: 44.00, end: 45.90, text: "스탬프제가?", size: 132 },
-      { at: 46.10, end: 48.10, text: "우신고에서", size: 118 },
-      { at: 48.20, end: 50.70, text: "스탬프제가?", size: 132 },
-      { at: 50.80, end: 52.60, text: "찍으면", size: 116 },
-      { at: 53.20, end: 56.20, text: "바로 보여", size: 112 },
-      { at: 59.60, end: 61.28, text: "다섯 개", size: 124 },
-      { at: 61.40, end: 62.55, text: "쿠폰", size: 136 },
-      { at: 62.75, end: 64.20, text: "하나만", size: 126 },
-      { at: 64.40, end: 65.45, text: "선택", size: 136 },
-      { at: 66.30, end: 67.12, text: "손이 먼저", size: 104 },
-      { at: 67.12, end: 68.30, text: "가", size: 138 },
-      { at: 69.10, end: 69.72, text: "눈이 먼저", size: 104 },
-      { at: 69.72, end: 70.80, text: "가", size: 138 },
-      { at: 72.55, end: 73.70, text: "오늘은", size: 112 },
-      { at: 73.80, end: 74.90, text: "달라", size: 126 },
-      { at: 75.15, end: 75.96, text: "다", size: 146 },
-      { at: 76.10, end: 77.35, text: "받아", size: 136 },
-      { at: 78.70, end: 80.10, text: "우신고에서", size: 120 },
-      { at: 80.20, end: 81.72, text: "스탬프제가?", size: 134 },
-      { at: 81.80, end: 83.48, text: "우신고에서", size: 120 },
-      { at: 83.60, end: 84.94, text: "스탬프제가?", size: 134 },
-      { at: 85.05, end: 86.88, text: "찍으면", size: 118 },
-      { at: 87.15, end: 90.20, text: "바로 보여", size: 114 },
-      { at: 91.30, end: 92.45, text: "달고나", size: 112 },
-      { at: 92.55, end: 93.78, text: "콩가루차", size: 110 },
-      { at: 93.90, end: 95.24, text: "팝콘", size: 120 },
-      { at: 95.35, end: 97.30, text: "아이스티", size: 122 },
-      { at: 98.20, end: 99.00, text: "찍고", size: 108 },
-      { at: 99.10, end: 100.20, text: "모으고", size: 108 },
-      { at: 100.35, end: 102.80, text: "받자", size: 124 },
-      { at: 103.50, end: 105.20, text: "찍고", size: 108 },
-      { at: 105.40, end: 106.92, text: "모으고", size: 108 },
-      { at: 107.15, end: 110.40, text: "받자", size: 126 },
-      { at: 110.40, end: 112.68, text: "아이스티", size: 122 }
+      { at: 0.00, end: 2.28, text: "우신고에서", size: 136 },
+      { at: 2.28, end: 9.86, text: "스탬프제가?", size: 156 },
+      { at: 11.80, end: 13.58, text: "학번", size: 136 },
+      { at: 13.58, end: 15.26, text: "입장", size: 136 },
+      { at: 15.26, end: 18.10, text: "내 QR", size: 134 },
+      { at: 18.10, end: 20.10, text: "한 번", size: 120 },
+      { at: 20.10, end: 21.70, text: "찍어", size: 132 },
+      { at: 21.70, end: 23.58, text: "눈앞이", size: 112 },
+      { at: 23.58, end: 25.70, text: "바뀌어", size: 114 },
+      { at: 25.70, end: 28.40, text: "사라지기", size: 100 },
+      { at: 28.40, end: 30.60, text: "전에", size: 120 },
+      { at: 30.60, end: 35.30, text: "딱", size: 154 },
+      { at: 35.30, end: 39.84, text: "맞춰", size: 138 },
+      { at: 39.84, end: 40.84, text: "우신고에서", size: 122 },
+      { at: 40.84, end: 42.54, text: "스탬프제가?", size: 136 },
+      { at: 42.54, end: 44.58, text: "우신고에서", size: 122 },
+      { at: 44.58, end: 46.90, text: "스탬프제가?", size: 136 },
+      { at: 47.68, end: 49.54, text: "찍으면", size: 120 },
+      { at: 49.54, end: 52.28, text: "바로 보여", size: 116 },
+      { at: 52.28, end: 55.84, text: "다섯 개", size: 128 },
+      { at: 55.84, end: 56.98, text: "쿠폰", size: 140 },
+      { at: 56.98, end: 58.18, text: "하나만", size: 130 },
+      { at: 58.18, end: 58.66, text: "선택", size: 140 },
+      { at: 59.28, end: 61.04, text: "손이 먼저", size: 108 },
+      { at: 61.04, end: 61.86, text: "가", size: 142 },
+      { at: 63.02, end: 64.08, text: "눈이 먼저", size: 108 },
+      { at: 64.08, end: 64.54, text: "가", size: 142 },
+      { at: 64.54, end: 65.42, text: "오늘은", size: 116 },
+      { at: 65.42, end: 66.06, text: "달라", size: 130 },
+      { at: 66.06, end: 67.62, text: "다", size: 150 },
+      { at: 67.62, end: 69.02, text: "받아", size: 140 },
+      { at: 71.58, end: 72.98, text: "우신고에서", size: 124 },
+      { at: 72.98, end: 74.38, text: "스탬프제가?", size: 138 },
+      { at: 74.38, end: 76.46, text: "우신고에서", size: 124 },
+      { at: 76.46, end: 78.90, text: "스탬프제가?", size: 138 },
+      { at: 79.58, end: 81.16, text: "찍으면", size: 122 },
+      { at: 81.16, end: 84.08, text: "바로 보여", size: 118 },
+      { at: 86.56, end: 87.96, text: "달고나", size: 116 },
+      { at: 88.22, end: 89.30, text: "콩가루차", size: 114 },
+      { at: 89.52, end: 90.08, text: "팝콘", size: 124 },
+      { at: 90.42, end: 91.18, text: "아이스티", size: 126 },
+      { at: 91.42, end: 91.88, text: "찍고", size: 112 },
+      { at: 91.88, end: 92.74, text: "모으고", size: 112 },
+      { at: 92.74, end: 94.44, text: "받자", size: 128 },
+      { at: 94.44, end: 95.66, text: "찍고", size: 112 },
+      { at: 95.66, end: 96.54, text: "모으고", size: 112 },
+      { at: 96.54, end: 98.24, text: "받자", size: 130 }
     ];
 
     function buildLyricCues() {
-      const isClassic = currentVersionKey === "classic";
-      const isBoss = currentVersionKey === "boss";
+      if (currentVersionKey === "classic") {
+        return classicLyricCues.map((cue) => ({
+          ...cue,
+          size: Math.round(cue.size * 0.96)
+        }));
+      }
+      if (currentVersionKey === "boss") {
+        return bossLyricCues.map((cue) => ({
+          ...cue,
+          size: Math.round(cue.size * 1.04)
+        }));
+      }
       return originalLyricCues.map((cue) => ({
         ...cue,
         at: Number(lyricMappedTime(cue.at).toFixed(3)),
         end: Number(lyricMappedTime(Math.min(cue.end, ORIGINAL_DURATION)).toFixed(3)),
-        size: Math.round(cue.size * (isBoss ? 1.04 : isClassic ? 0.94 : 1))
+        size: Math.round(cue.size)
       }));
     }
 
@@ -567,18 +663,18 @@
     function drawVersionAtmosphere(seconds) {
       const boss = currentVersionKey === "boss";
       const classic = currentVersionKey === "classic";
-      if (!boss && !classic) return;
+      const original = !boss && !classic;
 
       ctx.save();
       ctx.globalCompositeOperation = "screen";
-      const pulse = 0.5 + 0.5 * Math.sin(seconds * (boss ? 3.2 : 1.9));
-      const beamCount = boss ? 10 : 7;
+      const pulse = 0.5 + 0.5 * Math.sin(seconds * (boss ? 3.2 : classic ? 1.9 : 2.8));
+      const beamCount = boss ? 10 : classic ? 7 : 6;
       for (let i = 0; i < beamCount; i += 1) {
         const x = (i / (beamCount - 1)) * W;
-        const width = boss ? 160 : 110;
-        const shift = Math.sin(seconds * 0.7 + i) * 90;
+        const width = boss ? 160 : classic ? 110 : 92;
+        const shift = Math.sin(seconds * (original ? 1.4 : 0.7) + i) * (original ? 130 : 90);
         const g = ctx.createLinearGradient(x + shift, 0, W / 2, H);
-        g.addColorStop(0, boss ? "rgba(248,113,113,0.24)" : "rgba(254,243,199,0.18)");
+        g.addColorStop(0, boss ? "rgba(248,113,113,0.24)" : classic ? "rgba(254,243,199,0.18)" : "rgba(96,165,250,0.18)");
         g.addColorStop(1, "rgba(255,255,255,0)");
         ctx.fillStyle = g;
         ctx.beginPath();
@@ -589,13 +685,13 @@
         ctx.fill();
       }
 
-      ctx.globalAlpha = boss ? 0.52 : 0.26;
-      ctx.strokeStyle = boss ? "rgba(250,204,21,0.85)" : "rgba(255,255,255,0.72)";
-      ctx.lineWidth = boss ? 3.2 : 1.8;
-      for (let i = 0; i < (boss ? 5 : 3); i += 1) {
-        const r = 250 + i * 120 + pulse * (boss ? 50 : 24);
+      ctx.globalAlpha = boss ? 0.52 : classic ? 0.26 : 0.2;
+      ctx.strokeStyle = boss ? "rgba(250,204,21,0.85)" : classic ? "rgba(255,255,255,0.72)" : "rgba(191,219,254,0.72)";
+      ctx.lineWidth = boss ? 3.2 : classic ? 1.8 : 1.4;
+      for (let i = 0; i < (boss ? 5 : classic ? 3 : 4); i += 1) {
+        const r = 250 + i * (original ? 96 : 120) + pulse * (boss ? 50 : classic ? 24 : 36);
         ctx.beginPath();
-        ctx.arc(W / 2, H / 2, r, -Math.PI * 0.2 + seconds * 0.08, Math.PI * 1.08 + seconds * 0.08);
+        ctx.arc(W / 2, H / 2, r, -Math.PI * 0.2 + seconds * (original ? 0.18 : 0.08), Math.PI * 1.08 + seconds * (original ? 0.18 : 0.08));
         ctx.stroke();
       }
 
@@ -613,7 +709,113 @@
           ctx.lineTo(W + 120, y + Math.sin(seconds + i) * 60);
           ctx.stroke();
         }
+      } else if (original) {
+        ctx.globalAlpha = 0.18 + pulse * 0.08;
+        ctx.fillStyle = "rgba(37,99,235,0.34)";
+        for (let i = 0; i < 8; i += 1) {
+          const x = -220 + ((i * 310 + seconds * 180) % (W + 440));
+          fillRound(x, 120 + (i % 3) * 82, 220, 58, 18, "rgba(59,130,246,0.22)", "rgba(147,197,253,0.24)");
+        }
       }
+      ctx.restore();
+    }
+
+    function drawModeSceneAccent(scene, seconds, p) {
+      const boss = currentVersionKey === "boss";
+      const classic = currentVersionKey === "classic";
+      const original = !boss && !classic;
+      ctx.save();
+
+      if (original) {
+        ctx.globalCompositeOperation = "screen";
+        const blueFlash = snap(Math.sin(seconds * Math.PI * 2.2) * 0.5 + 0.5);
+        ctx.globalAlpha = 0.08 + blueFlash * 0.08;
+        ctx.strokeStyle = "rgba(147,197,253,0.85)";
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 7; i += 1) {
+          const x = 140 + i * 270 + Math.sin(seconds * 2 + i) * 26;
+          ctx.beginPath();
+          ctx.moveTo(x, 120);
+          ctx.lineTo(x + Math.sin(seconds + i) * 90, H - 120);
+          ctx.stroke();
+        }
+        if (["scan", "stamp", "redeem"].includes(scene.kind)) {
+          const ring = 110 + snap(p) * 360;
+          ctx.globalAlpha = 0.28 * snap(p * 2.4) * snap((1 - p) * 2.4);
+          ctx.strokeStyle = "rgba(96,165,250,0.95)";
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.arc(W / 2, H / 2, ring, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      if (classic) {
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = 0.18;
+        ctx.strokeStyle = "rgba(254,243,199,0.56)";
+        ctx.lineWidth = 2;
+        for (let staff = 0; staff < 4; staff += 1) {
+          const baseY = 170 + staff * 210 + Math.sin(seconds * 0.65 + staff) * 16;
+          for (let line = 0; line < 5; line += 1) {
+            ctx.beginPath();
+            ctx.moveTo(120, baseY + line * 12);
+            ctx.bezierCurveTo(560, baseY - 24 + line * 12, 1180, baseY + 42 + line * 12, W - 120, baseY + line * 12);
+            ctx.stroke();
+          }
+        }
+        const glow = ctx.createRadialGradient(W / 2, -80, 0, W / 2, -80, H * 0.95);
+        glow.addColorStop(0, "rgba(254,243,199,0.32)");
+        glow.addColorStop(1, "rgba(254,243,199,0)");
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, W, H);
+        if (scene.kind === "opening" || scene.kind === "end") {
+          ctx.globalAlpha = 0.22 * snap(p * 2);
+          ctx.fillStyle = "rgba(250,204,21,0.32)";
+          ctx.beginPath();
+          ctx.moveTo(W / 2 - 90, 0);
+          ctx.lineTo(W / 2 + 90, 0);
+          ctx.lineTo(W / 2 + 460, H);
+          ctx.lineTo(W / 2 - 460, H);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      if (boss) {
+        ctx.globalCompositeOperation = "screen";
+        const hit = Math.max(0, Math.sin(seconds * Math.PI * 1.1));
+        const curtain = ctx.createLinearGradient(0, 0, W, 0);
+        curtain.addColorStop(0, "rgba(127,29,29,0.72)");
+        curtain.addColorStop(0.12, "rgba(127,29,29,0)");
+        curtain.addColorStop(0.88, "rgba(127,29,29,0)");
+        curtain.addColorStop(1, "rgba(127,29,29,0.72)");
+        ctx.globalAlpha = 0.34;
+        ctx.fillStyle = curtain;
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.strokeStyle = "rgba(254,202,202,0.88)";
+        ctx.lineWidth = 4;
+        ctx.globalAlpha = 0.18 + hit * 0.16;
+        for (let i = 0; i < 8; i += 1) {
+          const x = 180 + ((i * 260 + seconds * 95) % (W - 260));
+          const y = 60 + ((i * 117 + seconds * 52) % (H - 160));
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + 42, y + 78);
+          ctx.lineTo(x - 12, y + 146);
+          ctx.lineTo(x + 72, y + 234);
+          ctx.stroke();
+        }
+        if (["stamp", "redeem", "end"].includes(scene.kind)) {
+          const flash = snap(p * 3) * snap((1 - p) * 2.2);
+          ctx.globalAlpha = flash * 0.28;
+          ctx.fillStyle = "rgba(248,113,113,0.68)";
+          ctx.fillRect(0, 0, W, H);
+        }
+      }
+
       ctx.restore();
     }
 
@@ -1115,6 +1317,7 @@
 
       drawBackground(t);
       drawVersionAtmosphere(t);
+      drawModeSceneAccent(scene, seconds, p);
 
       if (scene.kind === "opening") {
         drawOpeningLogo(seconds, scene, p);
@@ -1169,7 +1372,7 @@
 
       if (scene.kind === "rewards") {
         rewardAssets.forEach((asset, index) => {
-          const local = clamp((seconds - beat(204 + index * 5)) / beat(2.5));
+          const local = clamp((p - index * 0.18) / 0.26);
           const a = snap(local) * snap((1 - local) * 2.9);
           const x = [270, 1010, 430, 1160][index];
           const y = [245, 245, 570, 570][index];
