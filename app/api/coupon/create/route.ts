@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     const coupon = await updateDb(async (db) => {
       const account = db.accounts.find((item) => item.id === current.account.id);
-      if (!account || account.role !== "participant" || account.disabled) {
+      if (!account || account.disabled) {
         throw new HttpError(401, "참가자 계정을 찾을 수 없습니다.");
       }
 

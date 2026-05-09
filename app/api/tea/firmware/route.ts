@@ -36,6 +36,7 @@ function validateFirmwareText(value: unknown) {
 export async function GET(request: NextRequest) {
   try {
     const current = await requireCurrentSession(request);
+    if (current.session.role === "participant") throw new HttpError(403, "관리자 권한이 필요합니다.");
     assertTeaMakerAccess(current.account);
     const db = await readDb();
     const useDefault = request.nextUrl.searchParams.get("default") === "1";
@@ -68,6 +69,7 @@ export async function PATCH(request: NextRequest) {
     assertSameOrigin(request);
     assertContentLength(request, MAX_FIRMWARE_BYTES + 4096);
     const current = await requireCurrentSession(request);
+    if (current.session.role === "participant") throw new HttpError(403, "관리자 권한이 필요합니다.");
     assertTeaMakerAccess(current.account);
     rateLimit(`tea-firmware:${current.account.id}`, 20, 10 * 60 * 1000);
     const { ip, userAgent } = clientFingerprint(request.headers);

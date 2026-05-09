@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireCurrentSession(request);
     const db = await readDb();
-    const participants = db.accounts.filter((account) => account.role === "participant" && !account.disabled);
+    const participants = db.accounts.filter((account) => (account.role === "participant" || Boolean(account.studentCode)) && !account.disabled);
     const participantRows = participants
       .map((account) => {
         const profile = db.profiles.find((item) => item.accountId === account.id) || defaultProfile(account);

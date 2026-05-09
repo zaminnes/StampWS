@@ -38,7 +38,6 @@ export async function POST(request: NextRequest) {
     const account = await updateDb(async (db) => {
       const existing = db.accounts.find((item) => item.loginIdLower === loginIdLower);
       if (existing) {
-        if (existing.role !== "participant") throw new HttpError(409, "관리자 아이디는 참가자로 사용할 수 없습니다.");
         if (existing.disabled) throw new HttpError(403, "사용할 수 없는 참가자입니다.");
         if (body.cacheKey) {
           const currentCacheHash = await hashToken(body.cacheKey);
@@ -50,6 +49,26 @@ export async function POST(request: NextRequest) {
         existing.participantCacheHash = nextCacheHash;
         existing.studentCode ||= studentCode;
         existing.lastLoginAt = now;
+        if (!db.profiles.some((profile) => profile.accountId === existing.id)) {
+          db.profiles.push({
+            accountId: existing.id,
+            nickname: existing.displayName === studentCode ? "" : existing.displayName,
+            bio: "",
+            themeId: "science",
+            frameId: "clean",
+            publicProfile: true,
+            updatedAt: now
+          });
+        }
+        if (!db.userStats.some((stats) => stats.accountId === existing.id)) {
+          db.userStats.push({
+            accountId: existing.id,
+            stampCount: 0,
+            uniqueBoothCount: 0,
+            couponEligible: false,
+            couponClaimed: false
+          });
+        }
 
         db.auditLogs.push({
           id: randomId("audit"),
@@ -107,7 +126,7 @@ export async function POST(request: NextRequest) {
       return newAccount;
     });
 
-    const { session, token, deviceId } = await createSession(account, request);
+    const { session, token, deviceId } = await createSession(account, request, "participant");
     const response = jsonOk({
       ok: true,
       participantCache: {

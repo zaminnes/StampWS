@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const current = await getCurrentSession(request);
     if (!current) return jsonOk({ account: null });
     const db = await readDb();
-    return jsonOk(await buildMePayload(current.account, db));
+    return jsonOk(await buildMePayload(current.account, db, current.session.role));
   } catch (error) {
     return jsonError(error);
   }

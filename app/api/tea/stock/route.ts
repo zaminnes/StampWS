@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
     const db = await readDb();
     const account = db.accounts.find((item) => item.id === current.account.id);
     if (!account || account.disabled) throw new HttpError(401, "계정을 찾을 수 없습니다.");
+    if (current.session.role === "participant") throw new HttpError(403, "관리자 권한이 필요합니다.");
     if (rewardStockMode(request)) {
       if (!["boothAdmin", "rewardAdmin", "superAdmin"].includes(account.role)) throw new HttpError(403, "관리자 권한이 필요합니다.");
       return jsonOk({ rewards: visibleRewards(account, db.rewards) });
@@ -58,6 +59,7 @@ export async function PATCH(request: NextRequest) {
     const result = await updateDb(async (db) => {
       const account = db.accounts.find((item) => item.id === current.account.id);
       if (!account || account.disabled) throw new HttpError(401, "계정을 찾을 수 없습니다.");
+      if (current.session.role === "participant") throw new HttpError(403, "관리자 권한이 필요합니다.");
       const now = new Date().toISOString();
       if (rewardStockMode(request)) {
         if (!body.rewardId) throw new HttpError(400, "보상을 선택하세요.");

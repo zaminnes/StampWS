@@ -1,13 +1,13 @@
 import { createCouponQrToken, createParticipantQrToken, defaultStampDataUrl } from "./crypto";
 import { boothForAccount, managedBoothsForAccount } from "./booth-access";
 import { STAMP_REWARD_THRESHOLD } from "./stamp-config";
-import type { Account, Profile, StampDb, UserStats } from "./types";
+import type { Account, Profile, Role, StampDb, UserStats } from "./types";
 
-export function accountView(account: Account) {
+export function accountView(account: Account, roleOverride?: Role) {
   return {
     id: account.id,
     loginId: account.loginId,
-    role: account.role,
+    role: roleOverride || account.role,
     displayName: account.displayName,
     studentCode: account.studentCode,
     boothId: account.boothId,
@@ -47,9 +47,10 @@ function resolveStampImage(stampImageDataUrl: string, db: StampDb) {
   return booth?.stampImageDataUrl || db.meta.defaultStampImageDataUrl || defaultStampDataUrl(booth?.name || "STAMP");
 }
 
-export async function buildMePayload(account: Account, db: StampDb) {
+export async function buildMePayload(account: Account, db: StampDb, roleOverride?: Role) {
+  const activeRole = roleOverride || account.role;
   const base = {
-    account: accountView(account),
+    account: accountView(account, activeRole),
     rewards: db.rewards,
     booths: db.booths.map((booth) => ({
       id: booth.id,
@@ -60,7 +61,7 @@ export async function buildMePayload(account: Account, db: StampDb) {
     }))
   };
 
-  if (account.role === "participant") {
+  if (activeRole === "participant") {
     const profile = db.profiles.find((item) => item.accountId === account.id) || defaultProfile(account);
     const stamps = db.stamps
       .filter((stamp) => stamp.participantAccountId === account.id && !stamp.voided)
@@ -106,7 +107,7 @@ export async function buildMePayload(account: Account, db: StampDb) {
     };
   }
 
-  if (account.role === "boothAdmin") {
+  if (activeRole === "boothAdmin") {
     const managedBooths = managedBoothsForAccount(account, db);
     const booth = boothForAccount(account, db);
     return {
@@ -131,7 +132,7 @@ export async function buildMePayload(account: Account, db: StampDb) {
     };
   }
 
-  if (account.role === "rewardAdmin") {
+  if (activeRole === "rewardAdmin") {
     const reward = db.rewards.find((item) => item.id === account.rewardId);
     return {
       ...base,
@@ -146,7 +147,7 @@ export async function buildMePayload(account: Account, db: StampDb) {
     ...base,
     adminSummary: {
       accountCount: db.accounts.length,
-      participantCount: db.accounts.filter((item) => item.role === "participant").length,
+      participantCount: db.accounts.filter((item) => item.role === "participant" || Boolean(item.studentCode)).length,
       stampCount: db.stamps.filter((stamp) => !stamp.voided).length,
       couponCount: db.coupons.length,
       redeemedCouponCount: db.coupons.filter((coupon) => coupon.status === "redeemed").length,

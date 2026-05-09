@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         account.displayNameChangeCountToday = countToday + 1;
       }
 
-      if (account.role === "participant") {
+      if (current.session.role === "participant") {
         let profile = db.profiles.find((item) => item.accountId === account.id);
         if (!profile) {
           profile = {

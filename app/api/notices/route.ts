@@ -50,10 +50,10 @@ export async function GET(request: NextRequest) {
     const db = await readDb();
     const account = db.accounts.find((item) => item.id === current.account.id);
     if (!account || account.disabled) throw new HttpError(401, "계정을 찾을 수 없습니다.");
-    const postClubId = account.role === "superAdmin" ? "" : clubIdForAccount(account);
+    const postClubId = current.session.role === "superAdmin" ? "" : current.session.role === "participant" ? "" : clubIdForAccount(account);
     return jsonOk({
       notices: noticeView(db),
-      canPost: account.role === "superAdmin" || Boolean(postClubId),
+      canPost: current.session.role === "superAdmin" || Boolean(postClubId),
       postClubId,
       postClubName: postClubId ? clubNameForId(db, postClubId) : "총괄"
     });
@@ -75,10 +75,10 @@ export async function POST(request: NextRequest) {
 
     const result = await updateDb(async (db) => {
       const account = db.accounts.find((item) => item.id === current.account.id);
-      if (!account || account.disabled || account.role === "participant") {
+      if (!account || account.disabled || current.session.role === "participant") {
         throw new HttpError(403, "공지 권한이 없습니다.");
       }
-      const clubId = account.role === "superAdmin" ? sanitizeNotice(body.clubId || "all").slice(0, 32) : clubIdForAccount(account);
+      const clubId = current.session.role === "superAdmin" ? sanitizeNotice(body.clubId || "all").slice(0, 32) : clubIdForAccount(account);
       if (!clubId) throw new HttpError(403, "동아리 계정만 공지를 보낼 수 있습니다.");
       const clubName = clubId === "all" ? "전체" : clubNameForId(db, clubId);
       const now = new Date().toISOString();

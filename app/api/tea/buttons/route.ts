@@ -56,6 +56,7 @@ function normalizeButtons(value: unknown, previous: ArduinoButton[], actorAccoun
 export async function GET(request: NextRequest) {
   try {
     const current = await requireCurrentSession(request);
+    if (current.session.role === "participant") throw new HttpError(403, "관리자 권한이 필요합니다.");
     assertTeaMakerAccess(current.account);
     const db = await readDb();
     return jsonOk({
@@ -72,6 +73,7 @@ export async function PATCH(request: NextRequest) {
     assertSameOrigin(request);
     assertContentLength(request, MAX_BUTTONS * MAX_SCRIPT_BYTES + 4096);
     const current = await requireCurrentSession(request);
+    if (current.session.role === "participant") throw new HttpError(403, "관리자 권한이 필요합니다.");
     assertTeaMakerAccess(current.account);
     rateLimit(`tea-buttons:${current.account.id}`, 40, 10 * 60 * 1000);
     const { ip, userAgent } = clientFingerprint(request.headers);

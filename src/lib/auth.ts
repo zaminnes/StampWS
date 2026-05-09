@@ -120,16 +120,17 @@ export async function assertParticipantDeviceAllowed(request: NextRequest, login
   throw new HttpError(423, "같은 기기에서 여러 학번으로 반복 입장해 잠겼습니다. 관리자에게 문의하세요.");
 }
 
-export async function createSession(account: Account, request: NextRequest) {
+export async function createSession(account: Account, request: NextRequest, roleOverride?: Role) {
   const now = new Date();
   const token = randomId("tok");
   const tokenHash = await hashToken(token);
   const device = await getRequestDevice(request);
+  const sessionRole = roleOverride || account.role;
   const session: Session = {
     id: randomId("sess"),
     accountId: account.id,
     tokenHash,
-    role: account.role,
+    role: sessionRole,
     deviceHash: device.deviceHash,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + SESSION_MAX_AGE_SECONDS * 1000).toISOString(),
@@ -148,14 +149,14 @@ export async function createSession(account: Account, request: NextRequest) {
     db.loginEvents.push(loginEventFor(device, {
       accountId: account.id,
       loginId: account.loginId,
-      role: account.role,
+      role: sessionRole,
       displayName: account.displayName,
       result: "success",
       createdAt: now.toISOString()
     }));
     db.loginEvents = db.loginEvents.slice(-500);
 
-    if (account.role === "participant") {
+    if (sessionRole === "participant") {
       const since = new Date(now.getTime() - PARTICIPANT_SWITCH_WINDOW_MS).toISOString();
       const recentParticipantLogins = db.loginEvents.filter((event) => (
         event.deviceHash === device.deviceHash &&
@@ -243,7 +244,7 @@ export async function requireCurrentSession(request: NextRequest) {
 
 export async function requireRole(request: NextRequest, roles: Role[]) {
   const current = await requireCurrentSession(request);
-  if (!roles.includes(current.account.role)) {
+  if (!roles.includes(current.session.role)) {
     throw new HttpError(403, "이 기능을 사용할 권한이 없습니다.");
   }
   return current;

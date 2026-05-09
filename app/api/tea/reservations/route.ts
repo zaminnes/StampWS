@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     const account = db.accounts.find((item) => item.id === current.account.id);
     if (!account || account.disabled) throw new HttpError(401, "계정을 찾을 수 없습니다.");
 
-    if (account.role === "participant") {
+    if (current.session.role === "participant") {
       const reservations = db.teaReservations
         .filter((item) => item.participantAccountId === account.id)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       if (!account || account.disabled) throw new HttpError(401, "계정을 찾을 수 없습니다.");
 
       const now = new Date().toISOString();
-      if (account.role === "participant") {
+      if (current.session.role === "participant") {
         const hasOpen = db.teaReservations.some((item) => item.participantAccountId === account.id && isOpenTeaReservation(item));
         if (hasOpen) throw new HttpError(409, "진행 중인 티 예약이 있습니다.");
         const priority = hasTeaCouponPriority(db, account.id);
@@ -155,6 +155,7 @@ export async function PATCH(request: NextRequest) {
     assertSameOrigin(request);
     assertContentLength(request, 4096);
     const current = await requireCurrentSession(request);
+    if (current.session.role === "participant") throw new HttpError(403, "알파고 티메이커 운영 권한이 없습니다.");
     assertTeaMakerAccess(current.account);
     rateLimit(`tea-operate:${current.account.id}`, 80, 10 * 60 * 1000);
     const { ip, userAgent } = clientFingerprint(request.headers);

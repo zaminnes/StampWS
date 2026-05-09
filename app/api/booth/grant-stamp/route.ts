@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as { token?: string; boothId?: string; studentCode?: string };
     const token = (body.token || "").trim();
     const manualStudentCode = body.studentCode ? normalizeStudentCode(body.studentCode) : "";
-    if (manualStudentCode && current.account.role !== "superAdmin") {
+    if (manualStudentCode && current.session.role !== "superAdmin") {
       throw new HttpError(403, "학번 직접 지급은 총괄 관리자만 가능합니다.");
     }
     const parsedParticipantToken = manualStudentCode ? null : await verifyParticipantQrToken(token);
@@ -56,9 +56,6 @@ export async function POST(request: NextRequest) {
         const loginIdLower = normalizeLoginId(manualStudentCode);
         let participant = db.accounts.find((item) => item.loginIdLower === loginIdLower);
         let createdParticipant = false;
-        if (participant && participant.role !== "participant") {
-          throw new HttpError(409, "참가자 학번이 아닌 계정입니다.");
-        }
         if (participant?.disabled) throw new HttpError(403, "사용할 수 없는 참가자입니다.");
         if (!participant) {
           participant = {
@@ -91,6 +88,29 @@ export async function POST(request: NextRequest) {
             couponClaimed: false
           });
           createdParticipant = true;
+        } else {
+          const existingParticipant = participant;
+          existingParticipant.studentCode ||= manualStudentCode;
+          if (!db.profiles.some((profile) => profile.accountId === existingParticipant.id)) {
+            db.profiles.push({
+              accountId: existingParticipant.id,
+              nickname: existingParticipant.displayName === manualStudentCode ? "" : existingParticipant.displayName,
+              bio: "",
+              themeId: "science",
+              frameId: "clean",
+              publicProfile: true,
+              updatedAt: now
+            });
+          }
+          if (!db.userStats.some((stats) => stats.accountId === existingParticipant.id)) {
+            db.userStats.push({
+              accountId: existingParticipant.id,
+              stampCount: 0,
+              uniqueBoothCount: 0,
+              couponEligible: false,
+              couponClaimed: false
+            });
+          }
         }
 
         const alreadyStamped = db.stamps.some(
@@ -203,7 +223,7 @@ export async function POST(request: NextRequest) {
 
       if (!parsedParticipantToken) throw new HttpError(400, "참가자 또는 임시 QR 코드가 올바르지 않습니다.");
       const participant = db.accounts.find((item) => item.id === parsedParticipantToken.accountId);
-      if (!participant || participant.disabled || participant.role !== "participant") {
+      if (!participant || participant.disabled || (participant.role !== "participant" && !participant.studentCode)) {
         throw new HttpError(404, "참가자 계정을 찾을 수 없습니다.");
       }
       if (participant.qrVersion !== parsedParticipantToken.qrVersion) {
