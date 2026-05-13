@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Role = "participant" | "boothAdmin" | "rewardAdmin" | "superAdmin";
 
@@ -105,6 +105,101 @@ function QrPreview({ value }: { value: string }) {
   return <img className="localQrImage" src={src} alt="QR" />;
 }
 
+function guestTokenFromQr(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.searchParams.get("guest") || "";
+  } catch {
+    return trimmed.startsWith("g.") ? trimmed : "";
+  }
+}
+
+function QrCameraLogin({ onToken, disabled }: { onToken: (token: string) => Promise<void>; disabled: boolean }) {
+  const [message, setMessage] = useState("");
+  const [active, setActive] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const frameRef = useRef<number | null>(null);
+
+  const stopCamera = useCallback(() => {
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setActive(false);
+  }, []);
+
+  useEffect(() => stopCamera, [stopCamera]);
+
+  const startCamera = async () => {
+    setMessage("카메라 준비");
+    try {
+      const jsQR = (await import("jsqr")).default;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: "environment" } }
+      });
+      streamRef.current = stream;
+      if (!videoRef.current) throw new Error("카메라를 열지 못했습니다.");
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      setActive(true);
+      setMessage("QR을 비추세요");
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("QR을 읽지 못했습니다.");
+
+      const scan = async () => {
+        const video = videoRef.current;
+        if (!video || !streamRef.current) return;
+        if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          const token = code ? guestTokenFromQr(code.data) : "";
+          if (token) {
+            setMessage("인식 완료");
+            stopCamera();
+            await onToken(token);
+            return;
+          }
+        }
+        frameRef.current = requestAnimationFrame(scan);
+      };
+
+      frameRef.current = requestAnimationFrame(scan);
+    } catch (error) {
+      stopCamera();
+      const text = error instanceof Error ? error.message : "카메라 실패";
+      setMessage(text.includes("Permission") || text.includes("denied") ? "카메라 권한을 허용하세요." : text);
+    }
+  };
+
+  return (
+    <div className="localQrCamera">
+      <video ref={videoRef} muted playsInline />
+      <div className="localCameraActions">
+        <button className="localPrimary" disabled={disabled || active} onClick={startCamera} type="button">
+          스캔 시작
+        </button>
+        {active && (
+          <button className="localSecondary" onClick={stopCamera} type="button">
+            중지
+          </button>
+        )}
+      </div>
+      <p>{message || "카메라로 QR 스캔"}</p>
+    </div>
+  );
+}
+
 function Field(props: {
   label: string;
   value: string;
@@ -147,7 +242,6 @@ function AuthPanel({ refresh }: { refresh: () => Promise<void> }) {
   const [mode, setMode] = useState<AuthMode>("student");
   const [studentCode, setStudentCode] = useState("");
   const [studentName, setStudentName] = useState("");
-  const [guestToken, setGuestToken] = useState("");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -164,11 +258,6 @@ function AuthPanel({ refresh }: { refresh: () => Promise<void> }) {
         await apiJson("/api/local/auth/student", {
           method: "POST",
           body: JSON.stringify({ studentCode, displayName: studentName || undefined })
-        });
-      } else if (mode === "guest") {
-        await apiJson("/api/local/auth/guest", {
-          method: "POST",
-          body: JSON.stringify({ token: guestToken })
         });
       } else if (mode === "admin") {
         await apiJson("/api/local/auth/admin", {
@@ -189,6 +278,22 @@ function AuthPanel({ refresh }: { refresh: () => Promise<void> }) {
     }
   };
 
+  const loginGuestByToken = async (token: string) => {
+    setBusy(true);
+    setMessage("");
+    try {
+      await apiJson("/api/local/auth/guest", {
+        method: "POST",
+        body: JSON.stringify({ token })
+      });
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "실패");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <main className="localAuthShell">
       <section className="localAuthCard">
@@ -197,7 +302,6 @@ function AuthPanel({ refresh }: { refresh: () => Promise<void> }) {
             <p className="localEyebrow">StampWS</p>
             <h1>입장</h1>
           </div>
-          <span className="localPill">Mac 서버</span>
         </div>
         <div className="localTabs" role="tablist" aria-label="로그인 방식">
           <button className={mode === "student" ? "isActive" : ""} onClick={() => setMode("student")} type="button">
@@ -210,7 +314,7 @@ function AuthPanel({ refresh }: { refresh: () => Promise<void> }) {
             관리자
           </button>
           <button className={mode === "join" ? "isActive" : ""} onClick={() => setMode("join")} type="button">
-            가입
+            관리자 가입
           </button>
         </div>
         <form className="localForm" onSubmit={submit}>
@@ -223,8 +327,8 @@ function AuthPanel({ refresh }: { refresh: () => Promise<void> }) {
           )}
           {mode === "guest" && (
             <>
-              <Field label="QR 코드" value={guestToken} onChange={setGuestToken} placeholder="g.gpass_..." />
-              <p className="localNotice">총괄 관리자가 만든 QR만 됩니다.</p>
+              <QrCameraLogin onToken={loginGuestByToken} disabled={busy} />
+              <p className="localNotice">총괄 관리자 QR만 됩니다.</p>
             </>
           )}
           {mode === "admin" && (
@@ -242,25 +346,13 @@ function AuthPanel({ refresh }: { refresh: () => Promise<void> }) {
             </>
           )}
           {message && <p className="localError">{message}</p>}
-          <button className="localPrimary" type="submit" disabled={busy}>
-            {busy ? "처리중" : mode === "join" ? "가입" : "입장"}
-          </button>
+          {mode !== "guest" && (
+            <button className="localPrimary" type="submit" disabled={busy}>
+              {busy ? "처리중" : mode === "join" ? "관리자 가입" : "입장"}
+            </button>
+          )}
         </form>
       </section>
-      <aside className="localSideCard">
-        <div className="localMetric">
-          <strong>500명</strong>
-          <span>동시 운영 기준</span>
-        </div>
-        <div className="localMetric">
-          <strong>QR</strong>
-          <span>게스트 빠른 입장</span>
-        </div>
-        <div className="localMetric">
-          <strong>굿즈</strong>
-          <span>부스별 제작</span>
-        </div>
-      </aside>
     </main>
   );
 }
@@ -567,9 +659,7 @@ function AdminPanel({ me, refresh, claimFromUrl }: { me: Me; refresh: () => Prom
             {guestUrl && (
               <div className="localQrCard">
                 <QrPreview value={guestUrl} />
-                <button className="localSecondary" onClick={() => navigator.clipboard?.writeText(guestUrl)} type="button">
-                  복사
-                </button>
+                <p className="localNotice">사진으로 저장해서 전달</p>
               </div>
             )}
           </div>
@@ -654,7 +744,7 @@ export function LocalStampApp() {
           <h1>{me.account.role === "participant" ? "오늘" : "운영"}</h1>
         </div>
         <div className="localTopActions">
-          <span>{me.account.displayName}</span>
+          <span>로그인됨</span>
           <button className="localSecondary" onClick={logout} type="button">
             나가기
           </button>
@@ -662,7 +752,7 @@ export function LocalStampApp() {
       </header>
       <section className="localStatusRow">
         <div>
-          <strong>{me.account.type === "guest" ? "게스트" : me.account.studentCode || me.account.loginId}</strong>
+          <strong>{me.account.role === "participant" ? (me.account.type === "guest" ? "게스트" : "참가자") : "관리자"}</strong>
           <span>계정</span>
         </div>
         <div>

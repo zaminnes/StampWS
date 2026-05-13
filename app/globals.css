@@ -2496,7 +2496,8 @@ th {
   align-items: center;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(320px, 460px) minmax(260px, 1fr);
+  grid-template-columns: minmax(320px, 460px);
+  justify-content: center;
 }
 
 .localAuthCard,
@@ -2678,6 +2679,45 @@ th {
   color: var(--muted);
   font-size: 13px;
   font-weight: 750;
+  margin: 0;
+}
+
+.localQrCamera {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.localQrCamera video {
+  aspect-ratio: 1;
+  background: #111827;
+  border-radius: 14px;
+  object-fit: cover;
+  width: 100%;
+}
+
+.localCameraActions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  width: 100%;
+}
+
+.localCameraActions .localPrimary,
+.localCameraActions .localSecondary {
+  flex: 1;
+}
+
+.localQrCamera p {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
   margin: 0;
 }
 

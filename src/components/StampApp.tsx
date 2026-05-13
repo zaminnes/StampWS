@@ -3217,7 +3217,7 @@ function AdminPanel({ me, refresh }: { me: MePayload; refresh: () => Promise<voi
         <div className="sectionHeader">
           <div>
             <h2>총괄</h2>
-            <p>서버 기록 기준.</p>
+            <p>운영 기록 기준.</p>
           </div>
           <button className="secondaryButton" onClick={() => openShowcaseWindow("classic")} type="button">소개창</button>
         </div>
