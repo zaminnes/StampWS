@@ -376,6 +376,11 @@ export async function createGoodsClaimToken(orderId: string) {
   return { token, tokenHash: await hashToken(token) };
 }
 
+export async function verifyGoodsClaimToken(token: string) {
+  if (!/^claim\.gord_[A-Za-z0-9_-]+\.claimtok_[A-Za-z0-9_-]+$/.test(token)) return null;
+  return { tokenHash: await hashToken(token) };
+}
+
 export async function verifyAdminPassword(loginId: string, password: string) {
   const loginIdLower = normalizeLoginId(loginId);
   const result = await localQuery<LocalAccount>("SELECT * FROM local_accounts WHERE login_id_lower = $1", [loginIdLower]);
