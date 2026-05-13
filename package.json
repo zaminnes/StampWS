@@ -6,14 +6,20 @@
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
+    "local:dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "local:start": "next start --hostname 0.0.0.0 --port 3000",
+    "local:server": "docker compose up -d",
+    "local:server:down": "docker compose down",
     "secrets:generate": "node scripts/generate_secrets.mjs",
     "secrets:write": "node scripts/generate_secrets.mjs --write",
     "codes:print": "node scripts/print_admin_codes.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/pg": "^8.20.0",
     "jsqr": "^1.4.0",
     "next": "^16.2.4",
+    "pg": "^8.20.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"

@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: stampws
+      POSTGRES_USER: stampws
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - stampws_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stampws -d stampws"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
+      LOCAL_DATABASE_URL: postgres://stampws:${POSTGRES_PASSWORD}@db:5432/stampws
+      LOCAL_SUPERADMIN_PASSWORD: ${LOCAL_SUPERADMIN_PASSWORD:?LOCAL_SUPERADMIN_PASSWORD is required}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://stampws.kr}
+      STAMP_ALLOWED_ORIGINS: ${STAMP_ALLOWED_ORIGINS:-https://stampws.kr}
+      LOCAL_DB_POOL_MAX: ${LOCAL_DB_POOL_MAX:-30}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./storage:/app/storage
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - web
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
+
+volumes:
+  stampws_pgdata:
