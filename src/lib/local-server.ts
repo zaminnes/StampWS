@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { mkdirSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import pg from "pg";
@@ -50,12 +50,21 @@ export type LocalSession = {
   expires_at: string;
 };
 
+type QueryResult<T extends pg.QueryResultRow = pg.QueryResultRow> = { rows: T[]; rowCount: number | null };
 type Queryable = {
-  query: <T extends pg.QueryResultRow = pg.QueryResultRow>(text: string, params?: unknown[]) => Promise<{ rows: T[]; rowCount: number | null }>;
+  query: <T extends pg.QueryResultRow = pg.QueryResultRow>(text: string, params?: unknown[]) => Promise<QueryResult<T>>;
+};
+type SqliteStatement = {
+  all: (...params: unknown[]) => Record<string, unknown>[];
+};
+type SqliteDatabase = {
+  exec: (sql: string) => void;
+  prepare: (sql: string) => SqliteStatement;
 };
 
 declare global {
   var stampwsLocalPool: pg.Pool | undefined;
+  var stampwsLocalSqlite: SqliteDatabase | undefined;
   var stampwsLocalSchemaReady: Promise<void> | undefined;
 }
 
@@ -65,6 +74,10 @@ function localDatabaseUrl() {
     throw new HttpError(503, "LOCAL_DATABASE_URL 또는 DATABASE_URL이 필요합니다.");
   }
   return value;
+}
+
+export function localDatabaseKind() {
+  return localDatabaseUrl().startsWith("sqlite:") ? "sqlite" : "postgres";
 }
 
 function pool() {
@@ -79,13 +92,95 @@ function pool() {
   return globalThis.stampwsLocalPool;
 }
 
-export async function localQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(text: string, params: unknown[] = []) {
-  await ensureLocalReady();
+function sqlitePath() {
+  const raw = localDatabaseUrl().replace(/^sqlite:/, "");
+  if (!raw) throw new HttpError(503, "SQLite DB 경로가 필요합니다.");
+  return path.isAbsolute(raw) ? raw : path.join(process.cwd(), raw);
+}
+
+function sqliteDb() {
+  if (!globalThis.stampwsLocalSqlite) {
+    const filename = sqlitePath();
+    mkdirSync(path.dirname(filename), { recursive: true });
+    const nodeRequire = eval("require") as NodeRequire;
+    const { DatabaseSync } = nodeRequire("node:sqlite") as { DatabaseSync: new (path: string) => SqliteDatabase };
+    const db = new DatabaseSync(filename);
+    db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
+    globalThis.stampwsLocalSqlite = db;
+  }
+  return globalThis.stampwsLocalSqlite;
+}
+
+function sqliteParam(value: unknown) {
+  if (typeof value === "boolean") return value ? 1 : 0;
+  return value;
+}
+
+function sqliteStatement(text: string, params: unknown[]) {
+  const nextParams: unknown[] = [];
+  const sql = text
+    .replace(/COUNT\(\*\)::text/gi, "CAST(COUNT(*) AS TEXT)")
+    .replace(/now\(\)::text/gi, "datetime('now')")
+    .replace(/now\(\)/gi, "datetime('now')")
+    .replace(/'{}'::jsonb/gi, "'{}'")
+    .replace(/\s+FOR UPDATE\b/gi, "")
+    .replace(/\$([0-9]+)(::text)?/g, (_, index: string) => {
+      nextParams.push(params[Number(index) - 1]);
+      return "?";
+    });
+  return { sql, params: nextParams };
+}
+
+function normalizeSqliteRows<T extends pg.QueryResultRow>(rows: Record<string, unknown>[]) {
+  const booleanKeys = new Set(["active", "disabled", "revoked", "voided"]);
+  return rows.map((row) => {
+    const normalized: Record<string, unknown> = { ...row };
+    for (const key of booleanKeys) {
+      if (key in normalized && normalized[key] !== null && normalized[key] !== undefined) {
+        normalized[key] = Boolean(normalized[key]);
+      }
+    }
+    return normalized as T;
+  });
+}
+
+async function rawLocalQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(text: string, params: unknown[] = []) {
+  if (localDatabaseKind() === "sqlite") {
+    const prepared = sqliteStatement(text, params);
+    const statement = sqliteDb().prepare(prepared.sql);
+    const rows = statement.all(...prepared.params.map(sqliteParam));
+    return { rows: normalizeSqliteRows<T>(rows), rowCount: rows.length };
+  }
   return pool().query<T>(text, params);
 }
 
-export async function withLocalTransaction<T>(callback: (client: pg.PoolClient) => Promise<T>) {
+async function applyLocalSchema(schema: string) {
+  if (localDatabaseKind() === "sqlite") {
+    sqliteDb().exec(schema);
+    return;
+  }
+  await pool().query(schema);
+}
+
+export async function localQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(text: string, params: unknown[] = []) {
   await ensureLocalReady();
+  return rawLocalQuery<T>(text, params);
+}
+
+export async function withLocalTransaction<T>(callback: (client: Queryable) => Promise<T>) {
+  await ensureLocalReady();
+  if (localDatabaseKind() === "sqlite") {
+    const client: Queryable = { query: rawLocalQuery };
+    try {
+      await rawLocalQuery("BEGIN IMMEDIATE");
+      const result = await callback(client);
+      await rawLocalQuery("COMMIT");
+      return result;
+    } catch (error) {
+      await rawLocalQuery("ROLLBACK").catch(() => undefined);
+      throw error;
+    }
+  }
   const client = await pool().connect();
   try {
     await client.query("BEGIN");
@@ -103,8 +198,9 @@ export async function withLocalTransaction<T>(callback: (client: pg.PoolClient) 
 export async function ensureLocalReady() {
   if (!globalThis.stampwsLocalSchemaReady) {
     globalThis.stampwsLocalSchemaReady = (async () => {
-      const schema = await fs.readFile(path.join(process.cwd(), "db", "local-schema.sql"), "utf8");
-      await pool().query(schema);
+      const schemaName = localDatabaseKind() === "sqlite" ? "local-schema.sqlite.sql" : "local-schema.sql";
+      const schema = await fs.readFile(path.join(process.cwd(), "db", schemaName), "utf8");
+      await applyLocalSchema(schema);
       await bootstrapLocalSuperAdmin();
     })();
   }
@@ -112,7 +208,7 @@ export async function ensureLocalReady() {
 }
 
 async function bootstrapLocalSuperAdmin() {
-  const result = await pool().query<{ count: string }>("SELECT COUNT(*)::text AS count FROM local_accounts WHERE role = 'superAdmin'");
+  const result = await rawLocalQuery<{ count: string }>("SELECT COUNT(*)::text AS count FROM local_accounts WHERE role = 'superAdmin'");
   if (Number(result.rows[0]?.count || 0) > 0) return;
 
   const password = process.env.LOCAL_SUPERADMIN_PASSWORD || "change-this-password";
@@ -121,13 +217,13 @@ async function bootstrapLocalSuperAdmin() {
   }
   const now = new Date().toISOString();
   const accountId = randomId("acc");
-  await pool().query(
+  await rawLocalQuery(
     `INSERT INTO local_accounts
       (id, type, role, login_id, login_id_lower, password_hash, display_name, disabled, created_at)
      VALUES ($1, 'admin', 'superAdmin', 'superadmin', 'superadmin', $2, '총괄 관리자', false, $3)`,
     [accountId, await hashPassword(password), now]
   );
-  await pool().query(
+  await rawLocalQuery(
     `INSERT INTO local_audit_logs (id, actor_account_id, action, target_type, target_id, metadata, created_at)
      VALUES ($1, $2, 'system.bootstrapSuperAdmin', 'account', $2, $3, $4)`,
     [randomId("audit"), accountId, JSON.stringify({ loginId: "superadmin" }), now]

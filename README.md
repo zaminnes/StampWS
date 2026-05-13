@@ -6,23 +6,33 @@ Science Day stamp, profile, leaderboard, and reward coupon site.
 
 ```bash
 npm install
-npm run dev
+cp .env.example .env
+# Edit .env and replace APP_SECRET / LOCAL_SUPERADMIN_PASSWORD.
+npm run local:dev
 ```
 
 Open:
 
 ```txt
-http://127.0.0.1:3000
+http://127.0.0.1:3000/local
 ```
 
-Local development only: the first server-side auth request creates a dev database in `.data/`.
-Initial super admin credentials and the admin invite codes are written to:
+Default local mode uses SQLite at:
 
 ```txt
-.data/bootstrap-secrets.txt
+.data/local.sqlite
 ```
 
-Keep that file server-side only. It is ignored by git. Production never uses `.data/`.
+This avoids requiring PostgreSQL on the Mac during testing. For Docker or a dedicated PostgreSQL server, set `LOCAL_DATABASE_URL` to the Postgres URL instead.
+
+The first local auth/health request creates the tables and bootstraps the super admin account.
+
+```txt
+ID: superadmin
+Password: LOCAL_SUPERADMIN_PASSWORD in .env
+```
+
+Keep `.env` and `.data/` server-side only. They are ignored by git.
 
 ## Roles
 
